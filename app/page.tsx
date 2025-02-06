@@ -96,7 +96,7 @@ export default function HomePage() {
           <button type="submit">Get Directions</button>
         </form>
         <div style={{ height: "500px", width: "100%" }}>
-          <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
+          <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!} libraries={["places"]} nonce="your-generated-nonce">
             <GoogleMap mapContainerStyle={containerStyle} center={defaultCenter} zoom={12}>
               {directions && <DirectionsRenderer directions={directions} />}
             </GoogleMap>

@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   const origin = searchParams.get("origin");
   const destination = searchParams.get("destination");
   const travelMode = searchParams.get("travelMode") || "driving";
-  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   if (!origin || !destination) {
     return NextResponse.json(
