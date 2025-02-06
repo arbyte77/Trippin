@@ -1,0 +1,11 @@
+import mongoose from "mongoose";
+
+const JourneySchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  start: { type: String, required: true },
+  destination: { type: String, required: true },
+  startTime: { type: Date, required: true },
+  endTime: { type: Date, required: true },
+});
+
+export default mongoose.models.Journey || mongoose.model("Journey", JourneySchema);
