@@ -5,7 +5,8 @@ import Journey from "@/models/Journey";
 import User from "@/models/User";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export async function GET(request: NextRequest) {
+// ✅ GET request: Fetch all journeys for the logged-in user
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ message: "Not authenticated" }, { status: 401 });
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// ✅ POST request: Save a new journey with waypoints
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -38,13 +40,15 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { start, destination, startTime, endTime } = body;
+  const { start, waypoints, destination, travelMode, startTime, endTime } = body;
 
   try {
     const journey = await Journey.create({
       userId: user._id,
       start,
+      waypoints,  // ✅ Store multiple stop points
       destination,
+      travelMode, // ✅ Save travel mode
       startTime,
       endTime,
     });
