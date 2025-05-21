@@ -6,9 +6,9 @@ export async function getTransitItinerary(
   segmentPoints: string[],
   svc: google.maps.DirectionsService,
   origin: string,
-  originTime: string,
+  originTime: Date,                // ← type updated
   destination: string,
-  destinationTime: string,
+  destinationTime: Date,           // ← type updated (unused but kept for signature)
   waypoints: string[],
   stopTimes: { arriveBy: string; leaveBy: string }[]
 ): Promise<{
@@ -29,6 +29,7 @@ export async function getTransitItinerary(
               transitOptions: {
                 modes: [google.maps.TransitMode.BUS],
                 routingPreference: google.maps.TransitRoutePreference.LESS_WALKING,
+                departureTime: originTime,                  // ← added here
               },
             },
             (r, s) =>
@@ -61,9 +62,7 @@ export async function getTransitItinerary(
           title: "Walk",
           description: `Walk ${step.distance?.text} (${step.duration?.text})`,
         });
-      }
-      else if (step.travel_mode === google.maps.TravelMode.TRANSIT) {
-        // the Directions API client puts the JSON's transit_details into `step.transit`
+      } else if (step.travel_mode === google.maps.TravelMode.TRANSIT) {
         const t = (step as google.maps.DirectionsStep).transit;
         if (!t) continue;
 
@@ -89,12 +88,12 @@ export async function getTransitItinerary(
       }
     }
 
-    // add a blank separator except after the last slice
+    // separator except after last slice
     if (idx < legs.length - 1) {
       rows.push({ title: "" });
     }
 
-    // collect map‐center info if you need it
+    // collect map‐center info
     segmentInfos.push({
       position: {
         lat: (leg.start_location.lat() + leg.end_location.lat()) / 2,
