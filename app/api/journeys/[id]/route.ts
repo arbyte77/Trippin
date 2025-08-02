@@ -8,7 +8,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 // DELETE /api/journeys/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -21,8 +21,10 @@ export async function DELETE(
     return NextResponse.json({ message: "User not found" }, { status: 404 });
   }
 
+
+  const { id } = context.params;
   const deleted = await Journey.findOneAndDelete({
-    _id: params.id,
+    _id: id,
     userId: user._id,
   });
 
