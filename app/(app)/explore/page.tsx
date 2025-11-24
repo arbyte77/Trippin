@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useTripContext } from "../../context/TripContext";
+import { useRouter } from "next/navigation";
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   function toRad(x: number) {
@@ -17,6 +18,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 export default function ExplorePage() {
   const ctx = useTripContext();
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,8 +74,12 @@ export default function ExplorePage() {
   };
 
   const handleAddToTrip = (item: any) => {
-    // open modal listing trips
-    setShowAddToTripFor(item);
+    // set pending place in context and navigate to the add-to-trip flow
+    ctx.setPendingPlace(item);
+    // if user has exactly one saved trip, preselect it in the query
+    const tripId = ctx.savedJourneys && ctx.savedJourneys.length === 1 ? ctx.savedJourneys[0]._id : null;
+    if (tripId) router.push(`/add-to-trip?tripId=${tripId}`);
+    else router.push(`/add-to-trip`);
   };
 
   const confirmAddToTrip = async (tripId: string) => {
@@ -122,8 +128,8 @@ export default function ExplorePage() {
           const rating = r.reviews && r.reviews.length ? r.reviews[0].rating : null;
           return (
             <div key={i} className="border rounded p-4 flex gap-4">
-              <div className="w-24 h-24 bg-gray-100 flex-shrink-0 rounded overflow-hidden">
-                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">No image</div>}
+              <div className="w-24 h-24 bg-indigo-50 flex-shrink-0 rounded overflow-hidden">
+                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-sm text-indigo-400">No image</div>}
               </div>
               <div className="flex-1">
                 <div className="flex justify-between items-start gap-2">
@@ -146,7 +152,7 @@ export default function ExplorePage() {
                 ) : null}
 
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => handleBookmark(r)} className="px-3 py-1 bg-gray-100 rounded text-sm">{bookmarking === r.name ? "..." : "Bookmark"}</button>
+                  <button onClick={() => handleBookmark(r)} className="px-3 py-1 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800">{bookmarking === r.name ? "..." : "Bookmark"}</button>
                   <button onClick={() => handleAddToTrip(r)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add to trip</button>
                 </div>
               </div>
@@ -179,7 +185,7 @@ export default function ExplorePage() {
             )}
 
             <div className="mt-4 text-right">
-              <button onClick={() => setShowAddToTripFor(null)} className="px-3 py-1 bg-gray-200 rounded text-sm">Close</button>
+              <button onClick={() => setShowAddToTripFor(null)} className="px-3 py-1 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800">Close</button>
             </div>
           </div>
         </div>

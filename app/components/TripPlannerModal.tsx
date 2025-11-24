@@ -263,7 +263,7 @@ export default function TripPlannerModal({
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded text-white"
+              className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-white"
             >
               Cancel
             </button>

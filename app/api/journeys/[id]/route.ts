@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import connectMongo from "@/lib/mongodb";
 import Journey from "@/models/Journey";
 import User from "@/models/User";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/authOptions";
 
 // DELETE /api/journeys/:id
 export async function DELETE(

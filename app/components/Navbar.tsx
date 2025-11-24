@@ -58,7 +58,7 @@ export default function Navbar() {
                         router.push("/my-trips");
                         setDropdownOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 hover:bg-indigo-50"
                     >
                       My Trips
                     </button>
@@ -69,7 +69,7 @@ export default function Navbar() {
                         signOut();
                         setDropdownOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 hover:bg-indigo-50"
                     >
                       Sign Out
                     </button>

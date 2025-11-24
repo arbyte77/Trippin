@@ -3,7 +3,7 @@ import connectMongo from "@/lib/mongodb";
 import Place from "@/models/Place";
 import { getServerSession } from "next-auth/next";
 import User from "@/models/User";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/app/api/auth/authOptions";
 
 // GET /api/explore?q=... -> return a browsable gallery of places.
 // Behavior:

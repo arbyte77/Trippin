@@ -38,7 +38,7 @@ export default function ItineraryView({
         </button>
         <button
           onClick={onShowMap}
-          className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded text-white"
+          className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded text-white"
         >
           Map View
         </button>

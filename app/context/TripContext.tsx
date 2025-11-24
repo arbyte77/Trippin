@@ -45,6 +45,10 @@ interface TripContextType {
   setDirectionsSegments: (val: google.maps.DirectionsResult[]) => void;
   extraMarkers: { position: google.maps.LatLngLiteral }[];
   setExtraMarkers: (val: { position: google.maps.LatLngLiteral }[]) => void;
+  pendingPlace: any | null;
+  setPendingPlace: (val: any | null) => void;
+  pendingRecalc: boolean;
+  setPendingRecalc: (val: boolean) => void;
   addStop: () => void;
   removeStop: (i: number) => void;
   updateStop: (i: number, val: string) => void;
@@ -80,6 +84,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [itinerary, setItinerary] = useState<{ title: string; description: string }[]>([]);
   const [segmentInfos, setSegmentInfos] = useState<any[]>([]);
   const [savedJourneys, setSavedJourneys] = useState<any[]>([]);
+
+  // temporary place being added from Explore -> Add-to-Trip flow
+  const [pendingPlace, setPendingPlace] = useState<any | null>(null);
+  // flag to trigger a directions recalculation after client-side updates
+  const [pendingRecalc, setPendingRecalc] = useState(false);
 
   const [showTrips, setShowTrips] = useState(false);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
@@ -288,6 +297,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
   return (
     <TripContext.Provider
       value={{
+  pendingPlace,
+  setPendingPlace,
+  pendingRecalc,
+  setPendingRecalc,
         tripDate,
         setTripDate,
         origin,

@@ -63,12 +63,35 @@ export default function HomePage() {
     setDirectionsSegments,
     extraMarkers,
     setExtraMarkers,
+    pendingRecalc,
+    setPendingRecalc,
   } = useTripContext();
 
   const userStopIcon = "";
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* If an external flow requested a recalculation (e.g. after adding a place), perform it once maps are loaded */}
+      {/* we need window.google available (isLoaded) and pendingRecalc true */}
+      {isLoaded && pendingRecalc && (
+        (() => {
+          // perform a single recalculation using the context handler
+          // create a dummy event with preventDefault
+          const dummy = { preventDefault: () => {} } as unknown as FormEvent;
+          // call the shared handler which lives in context
+          // Note: getDirectionsHandler expects (e, maps, setDirections, setDirectionsSegments, setExtraMarkers)
+          (async () => {
+            try {
+              await getDirectionsHandler(dummy, window.google.maps, setDirections, setDirectionsSegments, setExtraMarkers);
+            } catch (e) {
+              console.error("Recalc error:", e);
+            } finally {
+              setPendingRecalc(false);
+            }
+          })();
+          return null;
+        })()
+      )}
       {/* ✅ My Trips View */}
       {showTrips && (
         <div className="p-6 bg-white">
