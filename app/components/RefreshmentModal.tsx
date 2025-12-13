@@ -5,7 +5,7 @@ import {
   Loader2, Clock, MapPin, Info, ChevronDown, ChevronUp,
   Toilet, Droplets, Coffee, UtensilsCrossed, Trees, Church, 
   Waves, ShoppingBag, Fuel, ParkingCircle, Building, Store,
-  Pizza, IceCream, Beer, Sandwich
+  Pizza, IceCream, Beer, Sandwich, Search, X
 } from "lucide-react";
 import { useTripContext } from "../context/TripContext";
 
@@ -55,27 +55,103 @@ export default function RefreshmentModal() {
   // Track which items have expanded details
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   
-  // Category filter
+  // Category filter (tabs)
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  
+  // Search query
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  
+  // Category definitions with icons and labels
+  const categories = [
+    { id: "all", label: "All", icon: "📍", color: "gray" },
+    { id: "utilities", label: "Utilities", icon: "🚿", color: "indigo" },
+    { id: "rest", label: "Parks & Rest", icon: "🌳", color: "green" },
+    { id: "quickfood", label: "Quick Bites", icon: "🥪", color: "orange" },
+    { id: "dining", label: "Dining", icon: "🍽️", color: "pink" },
+    { id: "other", label: "Other", icon: "📌", color: "slate" },
+  ];
   
   // Helper: get normalized category for filtering
   const getItemCategory = (item: any): string => {
     const t = (item.type || item.category || "").toLowerCase();
-    if (["toilets", "toilet", "restroom"].includes(t)) return "toilet";
-    if (["drinking_water", "water_point"].includes(t)) return "water";
-    if (["bench", "shelter", "picnic_site", "park", "garden", "beach"].includes(t)) return "rest";
-    if (["kiosk", "convenience", "general", "supermarket", "fast_food", "bakery"].includes(t)) return "quickfood";
-    if (["restaurant", "food", "cafe", "bar", "pub", "ice_cream"].includes(t)) return "dining";
+    // Public utilities: toilets, water, fuel, ATM, pharmacy
+    if (["toilets", "toilet", "restroom", "drinking_water", "water_point", "fuel", "atm", "pharmacy", "bank"].includes(t)) return "utilities";
+    if (["bench", "shelter", "picnic_site", "picnic_table", "park", "garden", "beach", "playground", "recreation_ground"].includes(t)) return "rest";
+    if (["kiosk", "convenience", "general", "supermarket", "grocery", "fast_food", "bakery", "confectionery", "pastry"].includes(t)) return "quickfood";
+    if (["restaurant", "food", "cafe", "bar", "pub", "ice_cream", "biergarten", "food_court"].includes(t)) return "dining";
     return "other";
   };
   
-  // Filter items based on selected category
-  const filteredItems = useMemo(() => {
-    if (categoryFilter === "all") return refreshmentItems;
-    return refreshmentItems.filter(item => getItemCategory(item) === categoryFilter);
-  }, [refreshmentItems, categoryFilter]);
+  // Priority order for sorting "All" list - essentials first
+  const getCategoryPriority = (item: any): number => {
+    const t = (item.type || item.category || "").toLowerCase();
+    // Priority 1: Toilets (most urgent)
+    if (["toilets", "toilet", "restroom"].includes(t)) return 1;
+    // Priority 2: Water
+    if (["drinking_water", "water_point"].includes(t)) return 2;
+    // Priority 3: Quick food/shops (hunger)
+    if (["kiosk", "convenience", "general", "supermarket", "grocery", "fast_food", "bakery"].includes(t)) return 3;
+    // Priority 4: Dining
+    if (["restaurant", "food", "cafe", "bar", "pub", "ice_cream", "biergarten", "food_court"].includes(t)) return 4;
+    // Priority 5: Rest spots
+    if (["bench", "shelter", "picnic_site", "park", "garden", "beach"].includes(t)) return 5;
+    // Priority 6: Other utilities
+    if (["fuel", "atm", "pharmacy", "bank"].includes(t)) return 6;
+    // Priority 7: Everything else
+    return 7;
+  };
   
-  // Category counts for filter buttons
+  // Filter items based on category AND search query
+  // For "all" tab, sort by priority (essentials first) then distance
+  const filteredItems = useMemo(() => {
+    let items = [...refreshmentItems]; // Clone to avoid mutating original
+    
+    // Apply category filter
+    if (categoryFilter !== "all") {
+      items = items.filter(item => getItemCategory(item) === categoryFilter);
+    }
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      items = items.filter(item => {
+        const name = (item.name || "").toLowerCase();
+        const desc = (item.description || "").toLowerCase();
+        const type = (item.type || item.category || "").toLowerCase();
+        const landmark = (item.location?.landmark || "").toLowerCase();
+        const address = (item.location?.address || "").toLowerCase();
+        const area = (item.location?.area || "").toLowerCase();
+        
+        return name.includes(query) || 
+               desc.includes(query) || 
+               type.includes(query) ||
+               landmark.includes(query) ||
+               address.includes(query) ||
+               area.includes(query);
+      });
+    }
+    
+    // Sort: For "all" view, sort by priority first, then by distance within each priority
+    // For specific categories, just sort by distance
+    if (categoryFilter === "all" && !searchQuery.trim()) {
+      items.sort((a, b) => {
+        const priorityA = getCategoryPriority(a);
+        const priorityB = getCategoryPriority(b);
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB; // Lower priority number = higher in list
+        }
+        // Same priority: sort by distance
+        return (a.distance || 0) - (b.distance || 0);
+      });
+    } else {
+      // For filtered views or search, just sort by distance
+      items.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+    
+    return items;
+  }, [refreshmentItems, categoryFilter, searchQuery]);
+  
+  // Category counts for tabs
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: refreshmentItems.length };
     refreshmentItems.forEach(item => {
@@ -84,6 +160,9 @@ export default function RefreshmentModal() {
     });
     return counts;
   }, [refreshmentItems]);
+  
+  // Clear search
+  const clearSearch = () => setSearchQuery("");
   
   const toggleExpand = (index: number) => {
     setExpandedItems(prev => {
@@ -252,91 +331,66 @@ export default function RefreshmentModal() {
             )}
           </select>
         </div>
-        {/* Category filter bar */}
+        {/* Search bar */}
         {refreshmentItems.length > 0 && !isLoadingAmenities && (
-          <div className="px-4 py-2 border-b bg-gray-50 flex flex-wrap gap-2">
-            <button
-              onClick={() => setCategoryFilter("all")}
-              className={`px-3 py-1 text-xs rounded-full transition ${
-                categoryFilter === "all" 
-                  ? "bg-gray-800 text-white" 
-                  : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              All ({categoryCounts.all || 0})
-            </button>
-            {(categoryCounts.toilet || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("toilet")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "toilet" 
-                    ? "bg-purple-600 text-white" 
-                    : "bg-white border border-purple-300 text-purple-700 hover:bg-purple-50"
-                }`}
-              >
-                🚻 Toilets ({categoryCounts.toilet})
-              </button>
-            )}
-            {(categoryCounts.water || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("water")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "water" 
-                    ? "bg-blue-600 text-white" 
-                    : "bg-white border border-blue-300 text-blue-700 hover:bg-blue-50"
-                }`}
-              >
-                💧 Water ({categoryCounts.water})
-              </button>
-            )}
-            {(categoryCounts.rest || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("rest")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "rest" 
-                    ? "bg-green-600 text-white" 
-                    : "bg-white border border-green-300 text-green-700 hover:bg-green-50"
-                }`}
-              >
-                🌳 Rest & Parks ({categoryCounts.rest})
-              </button>
-            )}
-            {(categoryCounts.quickfood || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("quickfood")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "quickfood" 
-                    ? "bg-orange-600 text-white" 
-                    : "bg-white border border-orange-300 text-orange-700 hover:bg-orange-50"
-                }`}
-              >
-                🥪 Quick Bites ({categoryCounts.quickfood})
-              </button>
-            )}
-            {(categoryCounts.dining || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("dining")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "dining" 
-                    ? "bg-pink-600 text-white" 
-                    : "bg-white border border-pink-300 text-pink-700 hover:bg-pink-50"
-                }`}
-              >
-                🍽️ Dining ({categoryCounts.dining})
-              </button>
-            )}
-            {(categoryCounts.other || 0) > 0 && (
-              <button
-                onClick={() => setCategoryFilter("other")}
-                className={`px-3 py-1 text-xs rounded-full transition ${
-                  categoryFilter === "other" 
-                    ? "bg-gray-600 text-white" 
-                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                📍 Other ({categoryCounts.other})
-              </button>
-            )}
+          <div className="px-4 py-2 border-b">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name, location, or type..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {searchQuery && (
+                <button
+                  onClick={clearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Category tabs */}
+        {refreshmentItems.length > 0 && !isLoadingAmenities && (
+          <div className="border-b bg-gray-50">
+            <div className="flex overflow-x-auto px-2 py-1 gap-1 scrollbar-hide">
+              {categories.map((cat) => {
+                const count = categoryCounts[cat.id] || 0;
+                if (cat.id !== "all" && count === 0) return null;
+                
+                const isActive = categoryFilter === cat.id;
+                const colorClasses: Record<string, { active: string; inactive: string }> = {
+                  gray: { active: "bg-gray-800 text-white", inactive: "bg-white text-gray-700 hover:bg-gray-100 border-gray-300" },
+                  indigo: { active: "bg-indigo-600 text-white", inactive: "bg-white text-indigo-700 hover:bg-indigo-50 border-indigo-300" },
+                  purple: { active: "bg-purple-600 text-white", inactive: "bg-white text-purple-700 hover:bg-purple-50 border-purple-300" },
+                  blue: { active: "bg-blue-600 text-white", inactive: "bg-white text-blue-700 hover:bg-blue-50 border-blue-300" },
+                  green: { active: "bg-green-600 text-white", inactive: "bg-white text-green-700 hover:bg-green-50 border-green-300" },
+                  orange: { active: "bg-orange-600 text-white", inactive: "bg-white text-orange-700 hover:bg-orange-50 border-orange-300" },
+                  pink: { active: "bg-pink-600 text-white", inactive: "bg-white text-pink-700 hover:bg-pink-50 border-pink-300" },
+                  slate: { active: "bg-slate-600 text-white", inactive: "bg-white text-slate-700 hover:bg-slate-50 border-slate-300" },
+                };
+                const colors = colorClasses[cat.color] || colorClasses.gray;
+                
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategoryFilter(cat.id)}
+                    className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                      isActive ? colors.active : colors.inactive
+                    }`}
+                  >
+                    <span className="mr-1">{cat.icon}</span>
+                    {cat.label}
+                    <span className={`ml-1 ${isActive ? "opacity-80" : "opacity-60"}`}>({count})</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
         <div className="p-4 max-h-[55vh] overflow-y-auto">
@@ -346,13 +400,21 @@ export default function RefreshmentModal() {
               <p className="text-sm text-gray-600">Finding nearby amenities...</p>
             </div>
           ) : filteredItems && filteredItems.length ? (
-            <ul className="space-y-3">
-              {/* Debug logging - shows in browser console */}
-              {(() => {
-                console.log('=== [RefreshmentModal RENDER] ===');
-                console.log('[RefreshmentModal] Total items:', refreshmentItems.length, 'Filtered:', filteredItems.length);
-                return null;
-              })()}
+            <>
+              {/* Results count indicator */}
+              <div className="text-xs text-gray-500 mb-2 flex items-center justify-between">
+                <span>
+                  Showing {filteredItems.length} 
+                  {filteredItems.length !== refreshmentItems.length && ` of ${refreshmentItems.length}`} pit stops
+                  {searchQuery && <span className="text-blue-600"> matching "{searchQuery}"</span>}
+                </span>
+                <span className="text-gray-400">
+                  {categoryFilter === "all" && !searchQuery.trim() 
+                    ? "Essentials first, then by distance" 
+                    : "Sorted by distance"}
+                </span>
+              </div>
+              <ul className="space-y-3">
               {filteredItems.map((p: any, i: number) => {
                 const isLocal = p.source === "goa_local" || p.external_place_id?.startsWith("goa:");
                 const isExpanded = expandedItems.has(i);
@@ -623,20 +685,39 @@ export default function RefreshmentModal() {
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+            </>
           ) : refreshmentItems.length > 0 ? (
-            <div className="text-sm text-gray-700 py-4 text-center">
-              No {categoryFilter} spots in this area. 
-              <button 
-                onClick={() => setCategoryFilter("all")} 
-                className="text-blue-600 hover:underline ml-1"
-              >
-                Show all
-              </button>
+            <div className="text-sm text-gray-700 py-8 text-center">
+              <div className="text-gray-400 text-4xl mb-3">🔍</div>
+              <p className="font-medium">No results found</p>
+              <p className="text-gray-500 mt-1">
+                {searchQuery ? `No matches for "${searchQuery}"` : `No ${categories.find(c => c.id === categoryFilter)?.label || categoryFilter} spots`}
+              </p>
+              <div className="mt-3 flex justify-center gap-2">
+                {searchQuery && (
+                  <button 
+                    onClick={clearSearch} 
+                    className="text-blue-600 hover:underline text-sm"
+                  >
+                    Clear search
+                  </button>
+                )}
+                {categoryFilter !== "all" && (
+                  <button 
+                    onClick={() => setCategoryFilter("all")} 
+                    className="text-blue-600 hover:underline text-sm"
+                  >
+                    Show all categories
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="text-sm text-gray-700">
-              No pit stops found nearby. Try a different location!
+            <div className="text-sm text-gray-700 py-8 text-center">
+              <div className="text-gray-400 text-4xl mb-3">📍</div>
+              <p>No pit stops found nearby.</p>
+              <p className="text-gray-500 mt-1">Try a different location!</p>
             </div>
           )}
         </div>

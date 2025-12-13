@@ -7,107 +7,185 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Helper: Generate a human-friendly description based on type/tags
+// ALWAYS generates at least one line of description with location context
 function generateDescription(item: any): string {
   const type = item.type || "";
   const name = item.name || "";
-  const tags = item.tags || [];
   const location = item.location || {};
   const details = item.details || {};
   
-  // If already has description, enhance it with location
-  if (item.description && item.description.length > 10) {
-    return item.description;
-  }
-  
-  const descriptions: Record<string, string> = {
+  // Type-based base descriptions
+  const typeDescriptions: Record<string, string> = {
     // Toilets & Facilities
-    toilets: "Public restroom facility",
-    toilet: "Public restroom facility",
-    drinking_water: "Public drinking water tap",
-    water_point: "Fresh water refill point",
+    toilets: "Public restroom",
+    toilet: "Public restroom",
+    drinking_water: "Drinking water tap",
+    water_point: "Water refill point",
     
     // Rest & Seating
-    bench: "Public seating - take a break and enjoy the surroundings",
-    shelter: "Covered rest area - shelter from sun or rain",
-    picnic_site: "Picnic spot with seating area",
+    bench: "Public seating area",
+    shelter: "Covered rest area",
+    picnic_site: "Picnic spot",
+    picnic_table: "Picnic table",
     
     // Food & Drinks - Local
     fast_food: "Quick bites and snacks",
-    kiosk: "Small shop - snacks, drinks, essentials",
-    convenience: "Kirana/convenience store - daily essentials, snacks, cold drinks",
-    deli: "Local delicatessen - fresh cuts and prepared foods",
+    kiosk: "Small shop for snacks and essentials",
+    convenience: "Convenience store",
+    deli: "Delicatessen",
     butcher: "Fresh meat shop",
     greengrocer: "Fresh fruits and vegetables",
-    bakery: "Fresh bread, pastries, and baked goods",
-    confectionery: "Sweets and confections",
-    pastry: "Fresh pastries and baked treats",
+    bakery: "Bakery - fresh bread and pastries",
+    confectionery: "Sweets shop",
+    pastry: "Pastry shop",
     
     // Food & Drinks - Restaurants
-    restaurant: "Sit-down dining",
-    cafe: "Coffee, tea, and light meals",
-    bar: "Drinks and spirits",
-    pub: "Local pub - drinks and food",
-    ice_cream: "Ice cream and cold desserts",
-    food_court: "Multiple food vendors in one place",
+    restaurant: "Restaurant",
+    cafe: "Café",
+    bar: "Bar",
+    pub: "Pub",
+    ice_cream: "Ice cream parlor",
+    food_court: "Food court",
+    biergarten: "Beer garden",
     
     // Shops
-    supermarket: "Supermarket - groceries and household items",
-    marketplace: "Local market - fresh produce, goods, and local finds",
-    general: "General store - variety of everyday items",
-    variety_store: "Variety store - assorted goods",
+    supermarket: "Supermarket",
+    marketplace: "Local market",
+    general: "General store",
+    variety_store: "Variety store",
+    grocery: "Grocery store",
     
     // Leisure
-    park: "Public park - green space to relax",
-    garden: "Garden - peaceful greenery",
-    playground: "Playground for children",
-    beach: "Beach access",
-    recreation_ground: "Open recreation area",
+    park: "Public park",
+    garden: "Garden",
+    playground: "Playground",
+    beach: "Beach",
+    recreation_ground: "Recreation ground",
+    swimming_pool: "Swimming pool",
     
-    // Other
-    fuel: "Petrol pump / fuel station",
-    atm: "ATM - cash withdrawal",
-    pharmacy: "Pharmacy / medical store",
+    // Services
+    fuel: "Petrol pump",
+    atm: "ATM",
+    pharmacy: "Pharmacy",
+    bank: "Bank",
     
-    // Tourism
+    // Tourism & Accommodation
     attraction: "Tourist attraction",
+    tourist_attraction: "Tourist attraction",
     viewpoint: "Scenic viewpoint",
-    hotel: "Hotel accommodation",
-    guest_house: "Guest house / homestay",
+    hotel: "Hotel",
+    guest_house: "Guest house",
+    hostel: "Hostel",
+    resort: "Resort",
+    lodging: "Accommodation",
+    spa: "Spa",
+    
+    // Religious
+    temple: "Temple",
+    church: "Church",
+    place_of_worship: "Place of worship",
   };
   
-  let desc = descriptions[type] || "";
-  
-  // Add cuisine info for restaurants/cafes
-  if (details.cuisine && Array.isArray(details.cuisine)) {
-    const cuisineStr = details.cuisine.slice(0, 3).join(", ");
-    desc = desc ? `${desc}. ${cuisineStr} cuisine` : `${cuisineStr} cuisine`;
+  // Start with existing description if good
+  let desc = "";
+  if (item.description && item.description.length > 15) {
+    desc = item.description;
+  } else {
+    // Build description from type
+    desc = typeDescriptions[type] || "";
   }
   
-  // Add features
-  const features = [];
+  // Add cuisine info for restaurants/cafes
+  if (details.cuisine && Array.isArray(details.cuisine) && details.cuisine.length > 0) {
+    const cuisineStr = details.cuisine.slice(0, 3).map((c: string) => 
+      c.charAt(0).toUpperCase() + c.slice(1)
+    ).join(", ");
+    if (desc) {
+      desc = `${desc} serving ${cuisineStr}`;
+    } else {
+      desc = `${cuisineStr} cuisine`;
+    }
+  }
+  
+  // Add key features as a compact list
+  const features: string[] = [];
   if (details.takeaway) features.push("takeaway");
   if (details.outdoorSeating) features.push("outdoor seating");
   if (details.delivery) features.push("delivery");
-  if (details.wheelchair) features.push("wheelchair accessible");
-  if (details.isFree) features.push("free");
+  if (details.wheelchair) features.push("♿ accessible");
+  if (details.isFree === true) features.push("free");
   
-  if (features.length > 0) {
-    desc = desc ? `${desc}. ${features.join(", ")}` : features.join(", ");
+  if (features.length > 0 && desc) {
+    desc = `${desc} • ${features.join(", ")}`;
+  } else if (features.length > 0) {
+    desc = features.join(", ");
   }
   
-  // If still no description, create from name and type
-  if (!desc) {
-    if (type && name && name.toLowerCase() !== type.toLowerCase()) {
-      desc = `${type.replace(/_/g, " ")} - ${name}`;
-    } else if (type) {
-      desc = type.replace(/_/g, " ");
+  // ALWAYS add location context - this is critical for OSM items
+  const locationDesc = buildLocationDescription(location, name, type);
+  if (locationDesc) {
+    desc = desc ? `${desc}. ${locationDesc}` : locationDesc;
+  }
+  
+  // Fallback: if still no description, create a minimal one
+  if (!desc || desc.length < 5) {
+    const typeName = (type || "Place").replace(/_/g, " ");
+    const capitalizedType = typeName.charAt(0).toUpperCase() + typeName.slice(1);
+    desc = name && name.toLowerCase() !== typeName.toLowerCase() 
+      ? `${capitalizedType} - ${name}` 
+      : capitalizedType;
+    
+    // Still add location if possible
+    if (locationDesc) {
+      desc = `${desc}. ${locationDesc}`;
     }
   }
   
   return desc;
 }
 
-// Helper: Get location context string
+// Helper: Build a location description from available data
+function buildLocationDescription(location: any, name: string, type: string): string {
+  if (!location) return "";
+  
+  const parts: string[] = [];
+  
+  // Priority 1: Landmark (most useful for finding the place)
+  if (location.landmark && location.landmark.length > 3) {
+    parts.push(`Near ${location.landmark}`);
+  }
+  
+  // Priority 2: Street/address
+  if (location.address && location.address.length > 5) {
+    // Extract street name from address if it's a full address
+    const streetMatch = location.address.match(/^([^,]+)/);
+    if (streetMatch && streetMatch[1].length > 3) {
+      const street = streetMatch[1].trim();
+      // Avoid duplicate with landmark
+      if (!parts.some(p => p.toLowerCase().includes(street.toLowerCase()))) {
+        parts.push(`on ${street}`);
+      }
+    }
+  }
+  
+  // Priority 3: Area/neighborhood
+  if (location.area && location.area.length > 2) {
+    // Avoid duplicate
+    if (!parts.some(p => p.toLowerCase().includes(location.area.toLowerCase()))) {
+      parts.push(location.area);
+    }
+  }
+  
+  // If we have coordinates but nothing else, generate a generic context
+  if (parts.length === 0 && location.lat && location.lng) {
+    // At minimum, indicate it's a mapped location
+    return "Location verified on map";
+  }
+  
+  return parts.join(", ");
+}
+
+// Helper: Get location context string (for backward compatibility)
 function getLocationContext(location: any): string {
   const parts = [];
   if (location.landmark) parts.push(`Near ${location.landmark}`);
