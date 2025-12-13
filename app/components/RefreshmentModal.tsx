@@ -1,6 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useTripContext } from "../context/TripContext";
 
 export default function RefreshmentModal() {
@@ -28,6 +29,7 @@ export default function RefreshmentModal() {
     setSavedJourneys,
     postSaveRedirectToTrips,
     setPostSaveRedirectToTrips,
+    isLoadingAmenities,
   } = useTripContext();
 
   const stops = useMemo(() => {
@@ -172,7 +174,12 @@ export default function RefreshmentModal() {
           </select>
         </div>
         <div className="p-4 max-h-[60vh] overflow-y-auto">
-          {refreshmentItems && refreshmentItems.length ? (
+          {isLoadingAmenities ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 text-blue-600 animate-spin mb-3" />
+              <p className="text-sm text-gray-600">Finding nearby amenities...</p>
+            </div>
+          ) : refreshmentItems && refreshmentItems.length ? (
             <ul className="space-y-3">
               {refreshmentItems.map((p: any, i: number) => (
                 <li key={i} className="flex items-center">

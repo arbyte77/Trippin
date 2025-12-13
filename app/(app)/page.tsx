@@ -1,22 +1,13 @@
 "use client";
 
-import React, { useState, useRef, useEffect, FormEvent } from "react";
+import React from "react";
 import { useLoadScript } from "@react-google-maps/api";
 import TripPlannerModal from "../components/TripPlannerModal";
 import ItineraryView from "../components/ItineraryView";
-import RefreshmentModal from "../components/RefreshmentModal";
-// MapView usage on homepage replaced with a placeholder for now
-import { getTransitItinerary } from "../utils/transitUtils";
 import { Trash, Pencil, MapPinned } from "lucide-react";
 import { useTripContext } from "../context/TripContext";
 
 const LIBRARIES: ("places")[] = ["places"];
-
-const containerStyle = {
-  width: "100vw",
-  height: "calc(100vh - 56px)",
-};
-const defaultCenter = { lat: 15.3913, lng: 73.8782 };
 
 export default function HomePage() {
   const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
@@ -54,98 +45,22 @@ export default function HomePage() {
     itinerary,
     setItinerary,
     savedJourneys,
-    setSavedJourneys,
     showTrips,
     setShowTrips,
     deleteTripHandler,
     saveTripHandler,
     getDirectionsHandler,
-    directions,
     setDirections,
-    directionsSegments,
     setDirectionsSegments,
-    extraMarkers,
     setExtraMarkers,
-    pendingRecalc,
-    setPendingRecalc,
-    pendingShowAmenities,
-    setPendingShowAmenities,
-    suggestRefreshments,
-    forceShowAmenities,
   } = useTripContext();
 
-  const userStopIcon = "";
-
-  // When an external flow requests a recalculation (e.g. after adding a place),
-  // perform it once maps are loaded. Use an effect so we do not call setState
-  // during render (which causes the "Cannot update a component while
-  // rendering a different component" React error).
-  useEffect(() => {
-    if (!isLoaded || !pendingRecalc) return;
-
-    // If origin/destination aren't set, clear the flag and do nothing.
-    if (!origin || !destination) {
-      setPendingRecalc(false);
-      return;
-    }
-
-    const run = async () => {
-      const dummy = { preventDefault: () => {} } as unknown as FormEvent;
-      try {
-        await getDirectionsHandler(dummy, window.google.maps, setDirections, setDirectionsSegments, setExtraMarkers);
-      } catch (e) {
-        console.error("Recalc error:", e);
-      } finally {
-        setPendingRecalc(false);
-      }
-    };
-
-    run();
-    // only depend on the values we read
-  }, [isLoaded, pendingRecalc, origin, destination, getDirectionsHandler, setDirections, setDirectionsSegments, setExtraMarkers, setPendingRecalc]);
-
-  // After recalculation, if user explicitly asked to see amenities, open modal
-  useEffect(() => {
-    if (!isLoaded || pendingRecalc || !pendingShowAmenities) return;
-    if (!origin || !destination) return;
-    (async () => {
-      try {
-        await forceShowAmenities();
-      } finally {
-        setPendingShowAmenities(false);
-      }
-    })();
-    // Intentionally do not include forceShowAmenities in deps to avoid loops on function identity
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, pendingRecalc, pendingShowAmenities, origin, destination, setPendingShowAmenities]);
+  // Recalculation is now handled by AppShell (always mounted)
+  
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* If an external flow requested a recalculation (e.g. after adding a place), perform it once maps are loaded */}
-      {/* we need window.google available (isLoaded) and pendingRecalc true */}
-      {isLoaded && pendingRecalc && (
-        (() => {
-          // Only attempt an automatic recalculation if we have both origin and destination.
-          // This avoids triggering the user-facing "Enter both origin and destination" alert
-          // when a background flow (like adding a place) requests a recalc.
-          if (!origin || !destination) {
-            setPendingRecalc(false);
-            return null;
-          }
-
-          // perform a single recalculation using the context handler
-          const dummy = { preventDefault: () => {} } as unknown as FormEvent;
-          (async () => {
-            try {
-              await getDirectionsHandler(dummy, window.google.maps, setDirections, setDirectionsSegments, setExtraMarkers);
-            } catch (e) {
-              console.error("Recalc error:", e);
-            } finally {
-              setPendingRecalc(false);
-            }
-          })();
-          return null;
-        })()
-      )}
+      {/* Recalculation is handled by useEffect above - removed duplicate inline IIFE that caused race conditions */}
+      
       {/* ✅ My Trips View */}
       {showTrips && (
         <div className="p-6 bg-white">
@@ -234,8 +149,7 @@ export default function HomePage() {
         loadError={loadError}
       />
 
-      {/* Refreshment suggestions modal */}
-      <RefreshmentModal />
+      {/* RefreshmentModal is now in AppShell for global access */}
 
       {!showItinerary && (
         <div className="flex items-center justify-center h-[50vh] bg-white border-t">

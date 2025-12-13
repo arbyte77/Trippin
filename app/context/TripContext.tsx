@@ -23,8 +23,11 @@ interface TripContextType {
   setRefreshmentInsertIndex: (v: number | null) => void;
   pendingShowAmenities: boolean;
   setPendingShowAmenities: (v: boolean) => void;
+  isLoadingDirections: boolean;
+  isLoadingAmenities: boolean;
   suggestRefreshments: () => Promise<void>;
   forceShowAmenities: () => Promise<void>;
+  clearTripState: () => void;
   tripDate: string;
   setTripDate: (val: string) => void;
   origin: string;
@@ -51,6 +54,8 @@ interface TripContextType {
   setItinerary: (val: { title: string; description: string }[]) => void;
   segmentInfos: any[];
   setSegmentInfos: (val: any[]) => void;
+  segmentsByLeg: number[]; // Array of segment counts per leg, e.g., [2, 1, 3] means leg1 has 2 segments, leg2 has 1, leg3 has 3
+  setSegmentsByLeg: (val: number[]) => void;
   savedJourneys: any[];
   setSavedJourneys: (val: any[]) => void;
   showTrips: boolean;
@@ -107,6 +112,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [postSaveRedirectToTrips, setPostSaveRedirectToTrips] = useState(false);
   const [itinerary, setItinerary] = useState<{ title: string; description: string }[]>([]);
   const [segmentInfos, setSegmentInfos] = useState<any[]>([]);
+  const [segmentsByLeg, setSegmentsByLeg] = useState<number[]>([]);
   const [savedJourneys, setSavedJourneys] = useState<any[]>([]);
 
   // temporary place being added from Explore -> Add-to-Trip flow
@@ -118,6 +124,21 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
   const [directionsSegments, setDirectionsSegments] = useState<google.maps.DirectionsResult[]>([]);
   const [extraMarkers, setExtraMarkers] = useState<{ position: google.maps.LatLngLiteral }[]>([]);
+  const [isLoadingDirections, setIsLoadingDirections] = useState(false);
+  const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
+
+  // Clear stale state when starting a fresh trip plan
+  const clearTripState = () => {
+    setDirections(null);
+    setDirectionsSegments([]);
+    setExtraMarkers([]);
+    setItinerary([]);
+    setSegmentInfos([]);
+    setSegmentsByLeg([]);
+    setRefreshmentItems([]);
+    setRefreshmentNote(null);
+    setRefreshmentInsertIndex(null);
+  };
 
   const REFRESHMENT_THRESHOLD_SECS = 2 * 60 * 60; // 2 hours
   const hasRefreshmentKeyword = (s: string) => {
@@ -202,57 +223,137 @@ export function TripProvider({ children }: { children: ReactNode }) {
   async function forceShowAmenities() {
     try {
       // Do not toggle modal off to avoid render loops; just overwrite contents and show
+      setIsLoadingAmenities(true);
       setRefreshmentItems([]);
       setRefreshmentNote(null);
+      setShowRefreshmentModal(true); // Show modal early with loading state
       const stops = waypoints.filter((w) => (w || "").trim());
       let insertIdx = 0;
-      let queryLabel = destination || origin || "Goa";
-      // Default to central Goa (Panjim area) as fallback
-      let lat = 15.4989;
-      let lng = 73.8278;
+      
+      // Search radius: 2km near each stop/destination
+      const SEARCH_RADIUS_M = 2000;
+      
+      // Collect search points: only destination + waypoints (not entire route)
+      const searchPoints: { lat: number; lng: number; label: string }[] = [];
+      
+      // Default fallback point (central Goa)
+      const fallbackPoint = { lat: 15.4989, lng: 73.8278, label: "Goa" };
+      
       if (travelMode === "TRANSIT" && directionsSegments.length > 0) {
-        const seg = directionsSegments[0];
-        const leg = seg.routes?.[0]?.legs?.[0];
-        if (leg) {
-          lat = leg.end_location.lat();
-          lng = leg.end_location.lng();
-          queryLabel = [origin, ...stops, destination][1] || destination || origin || "Goa";
+        // For transit: get coordinates of destination and each waypoint
+        const numLegs = stops.length + 1; // origin→stop1, stop1→stop2, ..., lastStop→destination
+        let segmentIndex = 0;
+        
+        // Get waypoint locations from segment endpoints
+        for (let legIdx = 0; legIdx < numLegs; legIdx++) {
+          const segCount = segmentsByLeg[legIdx] || 1;
+          const lastSegOfLeg = directionsSegments[segmentIndex + segCount - 1];
+          segmentIndex += segCount;
+          
+          if (lastSegOfLeg) {
+            const leg = lastSegOfLeg.routes?.[0]?.legs?.[0];
+            if (leg) {
+              const isDestination = legIdx === numLegs - 1;
+              const label = isDestination ? destination : stops[legIdx] || `Stop ${legIdx + 1}`;
+              searchPoints.push({
+                lat: leg.end_location.lat(),
+                lng: leg.end_location.lng(),
+                label,
+              });
+            }
+          }
         }
       } else if (directions) {
-        const leg = directions.routes?.[0]?.legs?.[0];
-        if (leg) {
-          lat = leg.end_location.lat();
-          lng = leg.end_location.lng();
-          queryLabel = [origin, ...stops, destination][1] || destination || origin || "Goa";
-        }
+        // For driving/walking: get coordinates of destination and each waypoint
+        const legs = directions.routes?.[0]?.legs || [];
+        legs.forEach((leg, idx) => {
+          const isDestination = idx === legs.length - 1;
+          const label = isDestination ? destination : stops[idx] || `Stop ${idx + 1}`;
+          searchPoints.push({
+            lat: leg.end_location.lat(),
+            lng: leg.end_location.lng(),
+            label,
+          });
+        });
       }
+      
+      // If no points found, use fallback
+      if (searchPoints.length === 0) {
+        searchPoints.push(fallbackPoint);
+      }
+      
+      console.log(`[forceShowAmenities] Searching within ${SEARCH_RADIUS_M}m of ${searchPoints.length} stops:`, 
+        searchPoints.map(p => p.label));
+      
       setRefreshmentInsertIndex(insertIdx);
-      const q = `restaurants near ${queryLabel}`;
-      // Use larger radius (3km) for better results and include both amenities endpoints
-      const [gData, oData, goaData] = await Promise.all([
-        fetch(`/api/explore?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ results: [] })),
-        fetch(`/api/amenities?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=3000`).then(r => r.json()).catch(() => ({ results: [] })),
-        fetch(`/api/goa-amenities?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=5000`).then(r => r.json()).catch(() => ({ results: [] })),
-      ]);
-      // Merge all results, prioritizing local Goa data
-      const merged = [
-        ...(goaData.results || []),
-        ...(oData.results || []),
-        ...(gData.results || []),
-      ];
-      // Deduplicate by name (case-insensitive)
+      
+      // Search amenities within 2km of each stop/destination
+      const allPromises: Promise<{ results: any[]; label: string }>[] = [];
+      
+      searchPoints.forEach(pt => {
+        // Amenities API (includes Overpass + Google)
+        allPromises.push(
+          fetch(`/api/amenities?lat=${pt.lat}&lng=${pt.lng}&radius=${SEARCH_RADIUS_M}`)
+            .then(r => r.json())
+            .then(data => ({ results: data.results || [], label: pt.label }))
+            .catch(() => ({ results: [], label: pt.label }))
+        );
+        // Local Goa amenities
+        allPromises.push(
+          fetch(`/api/goa-amenities?lat=${pt.lat}&lng=${pt.lng}&radius=${SEARCH_RADIUS_M}`)
+            .then(r => r.json())
+            .then(data => ({ results: data.results || [], label: pt.label }))
+            .catch(() => ({ results: [], label: pt.label }))
+        );
+      });
+      
+      const responses = await Promise.all(allPromises);
+      
+      // Merge all results, tagging each with which stop it's near
+      const merged: any[] = [];
+      responses.forEach(res => {
+        if (res?.results) {
+          res.results.forEach((item: any) => {
+            merged.push({ ...item, nearStop: res.label });
+          });
+        }
+      });
+      
+      // Deduplicate by name (case-insensitive) and coordinates
       const seen = new Set<string>();
       const deduped = merged.filter((item: any) => {
-        const key = (item.name || "").toLowerCase().trim();
-        if (seen.has(key)) return false;
+        const nameKey = (item.name || "").toLowerCase().trim();
+        const coordKey = item.location?.lat && item.location?.lng 
+          ? `${item.location.lat.toFixed(4)},${item.location.lng.toFixed(4)}` 
+          : "";
+        const key = `${nameKey}|${coordKey}`;
+        if (seen.has(key) || seen.has(nameKey)) return false;
         seen.add(key);
+        if (nameKey) seen.add(nameKey);
         return true;
       });
-      setRefreshmentItems(deduped.slice(0, 12));
-      setRefreshmentNote(`Nearby options around ${queryLabel}`);
-      setShowRefreshmentModal(true);
-    } catch {
-      // ignore
+      
+      // Sort by: toilets first, then distance
+      const prioritized = deduped.sort((a: any, b: any) => {
+        // Toilets get highest priority
+        const aIsToilet = (a.category === "toilet" || a.type === "toilets" || 
+          (a.tags || []).some((t: string) => t.toLowerCase().includes("toilet")));
+        const bIsToilet = (b.category === "toilet" || b.type === "toilets" || 
+          (b.tags || []).some((t: string) => t.toLowerCase().includes("toilet")));
+        if (aIsToilet && !bIsToilet) return -1;
+        if (!aIsToilet && bIsToilet) return 1;
+        // Then sort by distance if available
+        return (a.distance || 0) - (b.distance || 0);
+      });
+      
+      // Build note showing which stops we searched
+      const stopNames = searchPoints.map(p => p.label).join(", ");
+      setRefreshmentItems(prioritized.slice(0, 15));
+      setRefreshmentNote(`Pit stops within 2km of: ${stopNames}`);
+      setIsLoadingAmenities(false);
+    } catch (e) {
+      console.error("[forceShowAmenities] Error:", e);
+      setIsLoadingAmenities(false);
     }
   }
 
@@ -413,16 +514,30 @@ export function TripProvider({ children }: { children: ReactNode }) {
     if (!origin || !destination) {
       return alert("Enter both origin and destination.");
     }
+    
+    // Clear stale data and show loading state
+    setIsLoadingDirections(true);
+    clearTripState();
+    
     const svc = new maps.DirectionsService();
     const stops = waypoints.filter((w) => w.trim());
     if (travelMode === "TRANSIT") {
       try {
-        // Parse departure time - use current time if not specified
+        // Parse departure time - use current time if not specified or if saved time is in the past
         let departureDate: Date;
-        if (originTime) {
-          departureDate = new Date(`${tripDate}T${originTime}:00`);
+        const now = new Date();
+        if (originTime && tripDate) {
+          const parsedDate = new Date(`${tripDate}T${originTime}:00`);
+          // If the saved departure time is in the past, use current time instead
+          // (Transit API often fails for past times)
+          if (parsedDate > now) {
+            departureDate = parsedDate;
+          } else {
+            departureDate = now;
+            console.log("[TRANSIT] Saved departure time is in the past, using current time instead");
+          }
         } else {
-          departureDate = new Date();
+          departureDate = now;
         }
         console.log("[TRANSIT] Starting route search, departure:", departureDate.toISOString());
         
@@ -431,21 +546,128 @@ export function TripProvider({ children }: { children: ReactNode }) {
             ? google.maps.TransitRoutePreference.FEWER_TRANSFERS
             : google.maps.TransitRoutePreference.LESS_WALKING;
 
-        // Goa transit hubs for fallback routing - includes North, Central, and South Goa
-        const HUBS = [
-          // North/Central Goa hubs
-          "Panaji Kadamba Bus Stand, Goa",    // Main hub in Panaji
-          "Vasco da Gama Bus Stand, Goa",     // Near KK Birla campus
-          "Ponda Bus Stand, Goa",             // Central Goa hub
-          "Mapusa Bus Stand, Goa",            // North Goa hub
-          "Old Goa Bus Stop, Goa",            // Between Panaji and Ponda
-          // South Goa hubs
-          "Margao Kadamba Bus Stand, Goa",    // Major South Goa hub
-          "Colva Circle, Goa",
-          "Majorda Bus Stand, Goa",
-          "Verna Industrial Estate Bus Stop, Goa",
-          "Cortalim Bus Stand, Goa",
+        // Goa transit hubs with coordinates for smart selection
+        const ALL_HUBS = [
+          // South Goa hubs (prioritize for South Goa destinations)
+          { name: "Margao Kadamba Bus Stand, Goa", lat: 15.2832, lng: 73.9610, region: "south" },
+          { name: "Vasco da Gama Bus Stand, Goa", lat: 15.3954, lng: 73.8145, region: "south" },
+          { name: "Colva Circle, Goa", lat: 15.2789, lng: 73.9200, region: "south" },
+          { name: "Majorda Bus Stop, Goa", lat: 15.3010, lng: 73.9068, region: "south" },
+          { name: "Cortalim Bus Stand, Goa", lat: 15.4050, lng: 73.9050, region: "south" },
+          // Central Goa hubs
+          { name: "Panaji Kadamba Bus Stand, Goa", lat: 15.4963, lng: 73.8187, region: "central" },
+          { name: "Ponda Bus Stand, Goa", lat: 15.4033, lng: 73.9667, region: "central" },
+          { name: "Old Goa Bus Stop, Goa", lat: 15.5008, lng: 73.9116, region: "central" },
+          // North Goa hubs
+          { name: "Mapusa Bus Stand, Goa", lat: 15.5937, lng: 73.8102, region: "north" },
         ];
+        
+        // Helper: Haversine distance in km
+        const haversineDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+          const R = 6371; // Earth's radius in km
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        };
+        
+        // Helper: Get location coordinates from a place name (rough geocoding for Goa)
+        const getApproxCoords = (placeName: string): { lat: number, lng: number } | null => {
+          const lower = placeName.toLowerCase();
+          // Known Goa locations - comprehensive list for accurate detour detection
+          const knownPlaces: Record<string, { lat: number, lng: number }> = {
+            // South Goa
+            "colva": { lat: 15.2789, lng: 73.9221 },
+            "benaulim": { lat: 15.2642, lng: 73.9312 },
+            "margao": { lat: 15.2832, lng: 73.9862 },
+            "vasco": { lat: 15.3980, lng: 73.8113 },
+            "palolem": { lat: 15.0100, lng: 74.0231 },
+            "agonda": { lat: 15.0447, lng: 74.0072 },
+            "majorda": { lat: 15.3010, lng: 73.9068 },
+            "dabolim": { lat: 15.3808, lng: 73.8314 },
+            "airport": { lat: 15.3808, lng: 73.8314 },
+            "chikalim": { lat: 15.3878, lng: 73.8340 },
+            
+            // Central - BITS/Zuarinagar area
+            "bits": { lat: 15.3909, lng: 73.8786 },
+            "birla": { lat: 15.3909, lng: 73.8786 },
+            "kk birla": { lat: 15.3909, lng: 73.8786 },
+            "zuarinagar": { lat: 15.3909, lng: 73.8786 },
+            "zuari": { lat: 15.3909, lng: 73.8786 },
+            
+            // Panaji - detailed landmarks for better routing
+            "panjim": { lat: 15.4989, lng: 73.8278 },
+            "panaji": { lat: 15.4989, lng: 73.8278 },
+            "campal": { lat: 15.4935, lng: 73.8165 },  // Campal area (Taj Vivanta)
+            "taj vivanta": { lat: 15.4935, lng: 73.8165 },
+            "vivanta": { lat: 15.4935, lng: 73.8165 },
+            "18th june": { lat: 15.4978, lng: 73.8262 },  // 18th June Road
+            "miramar": { lat: 15.4750, lng: 73.8070 },
+            "dona paula": { lat: 15.4580, lng: 73.8040 },
+            "promenade": { lat: 15.5005, lng: 73.8285 },  // Panjim Promenade
+            "panjim market": { lat: 15.4998, lng: 73.8268 },
+            "panjim ferry": { lat: 15.5010, lng: 73.8295 },
+            "divja": { lat: 15.4985, lng: 73.8245 },  // Divja Circle
+            "library": { lat: 15.4950, lng: 73.8320 },  // Panjim Library area
+            "central library": { lat: 15.4950, lng: 73.8320 },
+            "sanskruti": { lat: 15.4950, lng: 73.8320 },
+            "patto": { lat: 15.4942, lng: 73.8335 },  // Patto area
+            "casanoni": { lat: 15.4970, lng: 73.8255 },  // Casanoni Trattoria (near Fontainhas)
+            "trattoria": { lat: 15.4970, lng: 73.8255 },
+            "fontainhas": { lat: 15.4965, lng: 73.8275 },  // Latin Quarter
+            "altinho": { lat: 15.4920, lng: 73.8310 },
+            "ktc": { lat: 15.4978, lng: 73.8285 },  // KTC Bus Stand
+            "kadamba": { lat: 15.4978, lng: 73.8285 },
+            
+            // Old Goa (for detecting detours)
+            "old goa": { lat: 15.5008, lng: 73.9116 },
+            "velha goa": { lat: 15.5008, lng: 73.9116 },
+            "gandhi circle": { lat: 15.5010, lng: 73.9110 },
+            
+            // Ponda area
+            "ponda": { lat: 15.4033, lng: 73.9667 },
+            
+            // North Goa
+            "mapusa": { lat: 15.5937, lng: 73.8102 },
+            "calangute": { lat: 15.5438, lng: 73.7553 },
+            "baga": { lat: 15.5551, lng: 73.7514 },
+            "anjuna": { lat: 15.5739, lng: 73.7413 },
+            "vagator": { lat: 15.5969, lng: 73.7394 },
+            "candolim": { lat: 15.5180, lng: 73.7620 },
+            "sinquerim": { lat: 15.4970, lng: 73.7730 },
+            "reis magos": { lat: 15.4980, lng: 73.7890 },
+          };
+          for (const [key, coords] of Object.entries(knownPlaces)) {
+            if (lower.includes(key)) return coords;
+          }
+          return null;
+        };
+        
+        // Sort hubs by total distance (origin→hub + hub→destination)
+        // This ensures we pick geographically sensible hubs
+        const originCoords = getApproxCoords(origin);
+        const destCoords = getApproxCoords(destination);
+        
+        let HUBS: string[];
+        if (originCoords && destCoords) {
+          // Sort hubs by how well they lie between origin and destination
+          const sortedHubs = ALL_HUBS.map(hub => {
+            const toOrigin = haversineDistance(originCoords.lat, originCoords.lng, hub.lat, hub.lng);
+            const toDest = haversineDistance(hub.lat, hub.lng, destCoords.lat, destCoords.lng);
+            const directDist = haversineDistance(originCoords.lat, originCoords.lng, destCoords.lat, destCoords.lng);
+            // Prefer hubs where origin→hub→dest is not much longer than direct
+            const detour = (toOrigin + toDest) - directDist;
+            return { ...hub, detour };
+          }).sort((a, b) => a.detour - b.detour);
+          
+          HUBS = sortedHubs.map(h => h.name);
+          console.log(`[TRANSIT] Sorted hubs for ${origin} → ${destination}:`, HUBS.slice(0, 3));
+        } else {
+          // Fallback: use default order
+          HUBS = ALL_HUBS.map(h => h.name);
+        }
         
         const MAX_WALK_DISTANCE_M = 6500; // 6.5km max walking - allows Majorda (5119m) and Colva Circle (6420m) to Colva Beach
         
@@ -486,13 +708,42 @@ export function TripProvider({ children }: { children: ReactNode }) {
           return r.routes?.[0]?.legs?.[0]?.duration?.value || 0;
         };
 
+        // Helper: calculate total walking distance in a DirectionsResult
+        const getTotalWalkingDistance = (r: google.maps.DirectionsResult | null): number => {
+          if (!r) return 0;
+          const leg = r.routes?.[0]?.legs?.[0];
+          if (!leg) return 0;
+          let walkDist = 0;
+          (leg.steps || []).forEach((step: any) => {
+            if (step.travel_mode === google.maps.TravelMode.WALKING || step.travel_mode === "WALKING") {
+              walkDist += step.distance?.value || 0;
+            }
+          });
+          return walkDist;
+        };
+
         // Helper function to find route for a single segment (with fallback via hubs)
+        // Prioritizes: 1) direct transit, 2) short duration, 3) less walking
+        // Avoids backtracking routes through distant hubs
         const findSegmentRoute = async (
           segOrigin: string, 
           segDest: string, 
           segDeparture: Date
-        ): Promise<{ segments: google.maps.DirectionsResult[], itineraryItems: { title: string; description: string }[], totalDuration: number }> => {
-          // Try direct transit first
+        ): Promise<{ segments: google.maps.DirectionsResult[], itineraryItems: { title: string; description: string }[], totalDuration: number, totalWalking: number }> => {
+          
+          type RouteOption = {
+            segments: google.maps.DirectionsResult[];
+            itineraryItems: { title: string; description: string }[];
+            totalDuration: number;
+            totalWalking: number;
+            hasTransit: boolean;
+            isDirect: boolean; // True if this is a direct route (no hub transfer)
+            hubName?: string; // Name of hub used (for filtering)
+          };
+          
+          const candidates: RouteOption[] = [];
+          
+          // Try direct transit first - this is the preferred option
           const directTransit = await routeRequest({
             origin: segOrigin,
             destination: segDest,
@@ -502,120 +753,414 @@ export function TripProvider({ children }: { children: ReactNode }) {
               departureTime: segDeparture,
             },
           });
-          
+        
+          let directTransitDuration = Infinity;
           if (directTransit && hasTransitLeg(directTransit)) {
-            return {
+            const walkDist = getTotalWalkingDistance(directTransit);
+            directTransitDuration = getDuration(directTransit);
+            candidates.push({
               segments: [directTransit],
               itineraryItems: [],
-              totalDuration: getDuration(directTransit),
-            };
+              totalDuration: directTransitDuration,
+              totalWalking: walkDist,
+              hasTransit: true,
+              isDirect: true,
+            });
           }
 
-          // Try walking if distance is short (<=3km)
+          // Get walking route for reference and short-distance fallback
           const walkRoute = await routeRequest({
             origin: segOrigin,
             destination: segDest,
             travelMode: google.maps.TravelMode.WALKING,
           });
           
+          const walkDist = walkRoute ? getWalkDistance(walkRoute) : Infinity;
+          
+          // Always add walking as a candidate (will be preferred for short distances < 1km)
           if (walkRoute) {
-            const walkDist = getWalkDistance(walkRoute);
-            if (walkDist <= 3000) {
-              return {
-                segments: [walkRoute],
-                itineraryItems: [{ title: "", description: `Walk ${Math.round(walkDist)}m` }],
-                totalDuration: getDuration(walkRoute),
-              };
+            candidates.push({
+              segments: [walkRoute],
+              itineraryItems: [],
+              totalDuration: getDuration(walkRoute),
+              totalWalking: walkDist,
+              hasTransit: false,
+              isDirect: true,
+            });
+          }
+
+          // ===== GENERALIZED DETOUR DETECTION FOR ALL GOA ROUTES =====
+          
+          // Define geographic regions across Goa for smart detour detection
+          type GeoRegion = { name: string; lat: number; lng: number; radius: number }; // radius in km
+          const GOA_REGIONS: GeoRegion[] = [
+            // Panaji / Central
+            { name: "panaji", lat: 15.4970, lng: 73.8270, radius: 4 },
+            // Old Goa
+            { name: "old_goa", lat: 15.5008, lng: 73.9116, radius: 2 },
+            // Margao / South Central
+            { name: "margao", lat: 15.2832, lng: 73.9610, radius: 4 },
+            // Vasco / Mormugao
+            { name: "vasco", lat: 15.3980, lng: 73.8113, radius: 3 },
+            // BITS / Zuarinagar
+            { name: "zuari", lat: 15.3909, lng: 73.8786, radius: 2 },
+            // Mapusa
+            { name: "mapusa", lat: 15.5937, lng: 73.8102, radius: 3 },
+            // Calangute-Baga beach belt
+            { name: "calangute_baga", lat: 15.5490, lng: 73.7535, radius: 3 },
+            // Anjuna-Vagator
+            { name: "anjuna", lat: 15.5850, lng: 73.7400, radius: 3 },
+            // Candolim-Sinquerim
+            { name: "candolim", lat: 15.5100, lng: 73.7670, radius: 2 },
+            // Ponda
+            { name: "ponda", lat: 15.4033, lng: 73.9667, radius: 3 },
+            // Colva-Benaulim beach belt
+            { name: "colva", lat: 15.2715, lng: 73.9265, radius: 3 },
+            // Palolem-Agonda (far south)
+            { name: "palolem", lat: 15.0270, lng: 74.0150, radius: 4 },
+          ];
+          
+          // Helper: Find which region a coordinate belongs to
+          const findRegion = (coords: { lat: number; lng: number } | null): GeoRegion | null => {
+            if (!coords) return null;
+            for (const region of GOA_REGIONS) {
+              const dist = haversineDistance(coords.lat, coords.lng, region.lat, region.lng);
+              if (dist <= region.radius) return region;
+            }
+            return null;
+          };
+          
+          // Helper: Check if a transit route goes through a specific location
+          const routeGoesThrough = (result: google.maps.DirectionsResult, detourLocation: string): boolean => {
+            const leg = result.routes?.[0]?.legs?.[0];
+            if (!leg) return false;
+            
+            const detourLower = detourLocation.toLowerCase();
+            for (const step of (leg.steps || [])) {
+              // Check step instructions for detour location names
+              const instructions = (step.instructions || "").toLowerCase();
+              if (instructions.includes(detourLower)) return true;
+              
+              // For transit steps, check stop names
+              if (step.transit) {
+                const depStop = (step.transit.departure_stop?.name || "").toLowerCase();
+                const arrStop = (step.transit.arrival_stop?.name || "").toLowerCase();
+                if (depStop.includes(detourLower) || arrStop.includes(detourLower)) return true;
+              }
+            }
+            return false;
+          };
+          
+          // Helper: Calculate approximate transit route distance by checking stops
+          const getTransitRouteDistance = (result: google.maps.DirectionsResult): number => {
+            const leg = result.routes?.[0]?.legs?.[0];
+            if (!leg) return 0;
+            let totalDist = 0;
+            for (const step of (leg.steps || [])) {
+              totalDist += step.distance?.value || 0;
+            }
+            return totalDist / 1000; // Return in km
+          };
+          
+          // Check if direct transit route goes through an undesirable detour
+          const originCoords = getApproxCoords(segOrigin);
+          const destCoords = getApproxCoords(segDest);
+          const originRegion = findRegion(originCoords);
+          const destRegion = findRegion(destCoords);
+          
+          // Calculate direct distance between origin and destination
+          const directDistKm = originCoords && destCoords 
+            ? haversineDistance(originCoords.lat, originCoords.lng, destCoords.lat, destCoords.lng)
+            : Infinity;
+          
+          // Determine if this is a "local" route (short distance or same region)
+          const isLocalRoute = directDistKm < 5 || (originRegion && destRegion && originRegion.name === destRegion.name);
+          const isShortRoute = directDistKm < 10;
+          
+          // Define major hub locations that shouldn't be detours for local routes
+          const MAJOR_HUBS = ["mapusa", "margao", "panaji", "ponda", "old goa", "vasco"];
+          
+          // For local/short routes, check if the transit goes through far-away hubs
+          if (directTransit && hasTransitLeg(directTransit)) {
+            const transitDistKm = getTransitRouteDistance(directTransit);
+            const detourRatio = transitDistKm / directDistKm;
+            
+            // If transit route is more than 2x the direct distance, it's likely a bad detour
+            if (isLocalRoute && detourRatio > 2.0) {
+              console.log(`[findSegmentRoute] Rejecting transit: route distance ${transitDistKm.toFixed(1)}km is ${detourRatio.toFixed(1)}x direct distance ${directDistKm.toFixed(1)}km`);
+              const idx = candidates.findIndex(c => c.isDirect && c.hasTransit);
+              if (idx >= 0) candidates.splice(idx, 1);
+              directTransitDuration = Infinity;
+            }
+            // For short routes, also check if it goes through specific far hubs
+            else if (isShortRoute) {
+              // Determine which hubs would be detours based on origin/dest regions
+              const potentialDetours: string[] = [];
+              
+              // If both in Panaji area, Old Goa/Mapusa/Ponda are detours
+              if (originRegion?.name === "panaji" && destRegion?.name === "panaji") {
+                potentialDetours.push("old goa", "gandhi circle", "mapusa", "ponda", "margao");
+              }
+              // If both in Margao area, Panaji/Mapusa are detours
+              else if (originRegion?.name === "margao" && destRegion?.name === "margao") {
+                potentialDetours.push("panaji", "mapusa", "old goa", "ponda");
+              }
+              // If both in Calangute-Baga area, Margao/Ponda/Old Goa are detours
+              else if (originRegion?.name === "calangute_baga" && destRegion?.name === "calangute_baga") {
+                potentialDetours.push("margao", "ponda", "old goa", "vasco");
+              }
+              // If both in Vasco area, Mapusa/Ponda/Old Goa are detours
+              else if (originRegion?.name === "vasco" && destRegion?.name === "vasco") {
+                potentialDetours.push("mapusa", "ponda", "old goa", "panaji");
+              }
+              // If both in Colva beach area, Panaji/Mapusa are detours
+              else if (originRegion?.name === "colva" && destRegion?.name === "colva") {
+                potentialDetours.push("panaji", "mapusa", "old goa", "ponda");
+              }
+              // Generic: for any local route, major hubs far from both origin and dest are detours
+              else if (isLocalRoute && originCoords && destCoords) {
+                for (const hub of MAJOR_HUBS) {
+                  const hubCoords = getApproxCoords(hub);
+                  if (hubCoords) {
+                    const distFromOrigin = haversineDistance(originCoords.lat, originCoords.lng, hubCoords.lat, hubCoords.lng);
+                    const distFromDest = haversineDistance(destCoords.lat, destCoords.lng, hubCoords.lat, hubCoords.lng);
+                    // If hub is more than 2x the direct distance from both origin and dest, it's a detour
+                    if (distFromOrigin > directDistKm * 2 && distFromDest > directDistKm * 2) {
+                      potentialDetours.push(hub);
+                    }
+                  }
+                }
+              }
+              
+              // Check if route goes through any potential detours
+              for (const detour of potentialDetours) {
+                if (routeGoesThrough(directTransit, detour)) {
+                  console.log(`[findSegmentRoute] Rejecting transit for ${originRegion?.name || 'unknown'} to ${destRegion?.name || 'unknown'}: goes through ${detour}`);
+                  const idx = candidates.findIndex(c => c.isDirect && c.hasTransit);
+                  if (idx >= 0) candidates.splice(idx, 1);
+                  directTransitDuration = Infinity;
+                  break;
+                }
+              }
             }
           }
 
-          // Try via hubs
-          for (const hub of HUBS) {
-            // Try transit from origin to hub, then walk to destination
-            const originToHub = await routeRequest({
-              origin: segOrigin,
-              destination: hub,
-              travelMode: google.maps.TravelMode.TRANSIT,
-              transitOptions: {
-                routingPreference: transitPreference,
-                departureTime: segDeparture,
-              },
-            });
-            
-            if (originToHub && hasTransitLeg(originToHub)) {
-              const hubToDest = await routeRequest({
-                origin: hub,
-                destination: segDest,
-                travelMode: google.maps.TravelMode.WALKING,
-              });
+          // Only try hub-based routes if direct transit wasn't found or took very long
+          const shouldTryHubs = !directTransit || !hasTransitLeg(directTransit) || directTransitDuration > 3600;
+          
+          if (shouldTryHubs) {
+            // Filter hubs: only consider hubs that are roughly "on the way"
+            // Use stricter filtering for local/short routes
+            const viableHubs = HUBS.filter(hub => {
+              if (!originCoords || !destCoords) return true; // Can't filter, try all
               
-              if (hubToDest && getWalkDistance(hubToDest) <= MAX_WALK_DISTANCE_M) {
-                return {
-                  segments: [originToHub, hubToDest],
-                  itineraryItems: [{ title: hub, description: `Walk ${Math.round(getWalkDistance(hubToDest))}m` }],
-                  totalDuration: getDuration(originToHub) + getDuration(hubToDest),
-                };
+              const hubInfo = ALL_HUBS.find(h => h.name === hub);
+              if (!hubInfo) return true;
+              
+              const viaHubDist = haversineDistance(originCoords.lat, originCoords.lng, hubInfo.lat, hubInfo.lng) +
+                                 haversineDistance(hubInfo.lat, hubInfo.lng, destCoords.lat, destCoords.lng);
+              
+              // Stricter ratio for local routes, relaxed for longer journeys
+              let maxDetourRatio: number;
+              if (isLocalRoute) {
+                maxDetourRatio = 1.2; // Very strict for local routes
+              } else if (isShortRoute) {
+                maxDetourRatio = 1.3; // Strict for short routes
+              } else {
+                maxDetourRatio = 1.5; // Standard for longer routes
               }
-            }
-
-            // Try walk from origin to hub, then transit to destination
-            const walkToHub = await routeRequest({
-              origin: segOrigin,
-              destination: hub,
-              travelMode: google.maps.TravelMode.WALKING,
+              
+              const isOnTheWay = viaHubDist <= directDistKm * maxDetourRatio;
+              
+              if (!isOnTheWay) {
+                console.log(`[findSegmentRoute] Skipping hub ${hub}: detour ratio ${(viaHubDist/directDistKm).toFixed(2)} > ${maxDetourRatio} (${isLocalRoute ? 'local' : isShortRoute ? 'short' : 'long'} route)`);
+              }
+              
+              return isOnTheWay;
             });
             
-            if (walkToHub && getWalkDistance(walkToHub) <= MAX_WALK_DISTANCE_M) {
-              const walkDuration = getDuration(walkToHub);
-              const transitTime = new Date(segDeparture.getTime() + walkDuration * 1000);
-              
-              const hubToDest = await routeRequest({
-                origin: hub,
-                destination: segDest,
+            console.log(`[findSegmentRoute] Viable hubs for ${segOrigin} → ${segDest}: ${viableHubs.length}/${HUBS.length}`);
+
+            // Try via viable hubs only
+            for (const hub of viableHubs) {
+              // OPTION 1: Transit from origin to hub, then TRANSIT to destination
+              const originToHubTransit = await routeRequest({
+                origin: segOrigin,
+                destination: hub,
                 travelMode: google.maps.TravelMode.TRANSIT,
                 transitOptions: {
                   routingPreference: transitPreference,
-                  departureTime: transitTime,
+                  departureTime: segDeparture,
                 },
               });
+          
+              if (originToHubTransit && hasTransitLeg(originToHubTransit)) {
+                const hubArrivalTime = new Date(segDeparture.getTime() + getDuration(originToHubTransit) * 1000);
               
-              if (hubToDest && hasTransitLeg(hubToDest)) {
-                return {
-                  segments: [walkToHub, hubToDest],
-                  itineraryItems: [{ title: hub, description: `Walk ${Math.round(getWalkDistance(walkToHub))}m to hub` }],
-                  totalDuration: walkDuration + getDuration(hubToDest),
-                };
+                // Try transit from hub to destination
+                const hubToDestTransit = await routeRequest({
+                  origin: hub,
+                  destination: segDest,
+                  travelMode: google.maps.TravelMode.TRANSIT,
+                  transitOptions: {
+                    routingPreference: transitPreference,
+                    departureTime: hubArrivalTime,
+                  },
+                });
+              
+                if (hubToDestTransit && hasTransitLeg(hubToDestTransit)) {
+                  const totalWalk = getTotalWalkingDistance(originToHubTransit) + getTotalWalkingDistance(hubToDestTransit);
+                  const totalDur = getDuration(originToHubTransit) + getDuration(hubToDestTransit);
+                  
+                  // Only add if this hub route is not significantly longer than direct
+                  if (directTransitDuration === Infinity || totalDur <= directTransitDuration * 1.3) {
+                    candidates.push({
+                      segments: [originToHubTransit, hubToDestTransit],
+                      itineraryItems: [{ title: hub, description: "Transfer" }],
+                      totalDuration: totalDur,
+                      totalWalking: totalWalk,
+                      hasTransit: true,
+                      isDirect: false,
+                      hubName: hub,
+                    });
+                  }
+                }
+              
+                // Try walking from hub to destination (only if short)
+                const hubToDestWalk = await routeRequest({
+                  origin: hub,
+                  destination: segDest,
+                  travelMode: google.maps.TravelMode.WALKING,
+                });
+              
+                if (hubToDestWalk) {
+                  const hubToDestWalkDist = getWalkDistance(hubToDestWalk);
+                  if (hubToDestWalkDist <= MAX_WALK_DISTANCE_M) {
+                    const totalWalk = getTotalWalkingDistance(originToHubTransit) + hubToDestWalkDist;
+                    candidates.push({
+                      segments: [originToHubTransit, hubToDestWalk],
+                      itineraryItems: [{ title: hub, description: `Walk ${Math.round(hubToDestWalkDist)}m` }],
+                      totalDuration: getDuration(originToHubTransit) + getDuration(hubToDestWalk),
+                      totalWalking: totalWalk,
+                      hasTransit: true,
+                      isDirect: false,
+                      hubName: hub,
+                    });
+                  }
+                }
+              }
+
+              // OPTION 2: Walk from origin to hub (only if within threshold), then transit to destination
+              const walkToHub = await routeRequest({
+                origin: segOrigin,
+                destination: hub,
+                travelMode: google.maps.TravelMode.WALKING,
+              });
+          
+              if (walkToHub) {
+                const walkToHubDist = getWalkDistance(walkToHub);
+                if (walkToHubDist <= MAX_WALK_DISTANCE_M) {
+                  const walkDuration = getDuration(walkToHub);
+                  const transitTime = new Date(segDeparture.getTime() + walkDuration * 1000);
+                
+                  const hubToDest = await routeRequest({
+                    origin: hub,
+                    destination: segDest,
+                    travelMode: google.maps.TravelMode.TRANSIT,
+                    transitOptions: {
+                      routingPreference: transitPreference,
+                      departureTime: transitTime,
+                    },
+                  });
+          
+                  if (hubToDest && hasTransitLeg(hubToDest)) {
+                    const totalWalk = walkToHubDist + getTotalWalkingDistance(hubToDest);
+                    candidates.push({
+                      segments: [walkToHub, hubToDest],
+                      itineraryItems: [{ title: hub, description: `Walk ${Math.round(walkToHubDist)}m to hub` }],
+                      totalDuration: walkDuration + getDuration(hubToDest),
+                      totalWalking: totalWalk,
+                      hasTransit: true,
+                      isDirect: false,
+                      hubName: hub,
+                    });
+                  }
+                }
               }
             }
           }
+          
+          // Pick the best route using improved sorting
+          if (candidates.length > 0) {
+            // First, check if there's a short direct walk option (< 1km)
+            const shortWalk = candidates.find(c => !c.hasTransit && c.totalWalking < 1000);
+            if (shortWalk) {
+              console.log(`[findSegmentRoute] Using short direct walk: ${shortWalk.totalWalking}m`);
+              return shortWalk;
+            }
+            
+            // Sort by: 
+            // 1) Has transit (prefer transit over pure walking)
+            // 2) Direct routes (prefer direct over hub-based)
+            // 3) Total duration (prefer faster routes)
+            // 4) Total walking (prefer less walking)
+            candidates.sort((a, b) => {
+              // Prefer routes with transit
+              if (a.hasTransit && !b.hasTransit) return -1;
+              if (!a.hasTransit && b.hasTransit) return 1;
+              
+              // Prefer direct routes over hub-based routes
+              if (a.isDirect && !b.isDirect) return -1;
+              if (!a.isDirect && b.isDirect) return 1;
+              
+              // Prefer shorter total duration (weight heavily)
+              const durationDiff = a.totalDuration - b.totalDuration;
+              if (Math.abs(durationDiff) > 300) { // If difference > 5 minutes, use duration
+                return durationDiff;
+              }
+              
+              // For similar durations, prefer less walking
+              return a.totalWalking - b.totalWalking;
+            });
+            
+            const best = candidates[0];
+            console.log(`[findSegmentRoute] Best route: ${best.isDirect ? 'direct' : 'via hub'} ${best.hasTransit ? 'transit' : 'walk'}, duration: ${Math.round(best.totalDuration/60)}min, walking: ${best.totalWalking}m`);
+            return best;
+          }
 
-          // Fallback to walking
+          // Fallback to walking (for longer distances, suggest cab)
           if (walkRoute) {
+            const walkDistFallback = getWalkDistance(walkRoute);
             return {
               segments: [walkRoute],
-              itineraryItems: [{ title: "", description: `Walk ${Math.round(getWalkDistance(walkRoute))}m (no transit available)` }],
+              itineraryItems: [{ title: "", description: `Walk ${Math.round(walkDistFallback)}m (no transit available)` }],
               totalDuration: getDuration(walkRoute),
+              totalWalking: walkDistFallback,
             };
           }
 
-          return { segments: [], itineraryItems: [], totalDuration: 0 };
+          return { segments: [], itineraryItems: [], totalDuration: 0, totalWalking: 0 };
         };
 
         // Build list of all route points: origin, waypoints, destination
         const allPoints = [origin, ...stops, destination];
         const allSegments: google.maps.DirectionsResult[] = [];
+        const segmentsPerLeg: number[] = []; // Track how many segments each leg has
         const allItineraryItems: { title: string; description: string }[] = [{ title: origin, description: "" }];
         let currentDeparture = departureDate;
 
         console.log(`[TRANSIT] Routing through ${allPoints.length} points: ${allPoints.join(" → ")}`);
 
-        // Route each segment
+        // Route each segment (leg = pair of consecutive points)
         for (let i = 0; i < allPoints.length - 1; i++) {
           const segOrigin = allPoints[i];
           const segDest = allPoints[i + 1];
-          console.log(`[TRANSIT] Routing segment ${i + 1}: ${segOrigin} → ${segDest}`);
+          console.log(`[TRANSIT] Routing leg ${i + 1}: ${segOrigin} → ${segDest}`);
           
           const result = await findSegmentRoute(segOrigin, segDest, currentDeparture);
+          
+          // Track how many segments this leg produced
+          segmentsPerLeg.push(result.segments.length);
           
           if (result.segments.length > 0) {
             allSegments.push(...result.segments);
@@ -654,8 +1199,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
           else setDirectionsSegments([]);
         }
         
+        setSegmentsByLeg(segmentsPerLeg);
         setItinerary(allItineraryItems);
         setSegmentInfos([]);
+        setIsLoadingDirections(false);
         setShowItinerary(true);
         setTimeout(() => setShowModal(false), 0);
         
@@ -669,6 +1216,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
           { title: destination, description: "" },
         ]);
         setSegmentInfos([]);
+        setIsLoadingDirections(false);
         setShowItinerary(true);
         setTimeout(() => setShowModal(false), 0);
       }
@@ -686,6 +1234,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
         (res: any, stat: any) => {
           if (stat !== "OK" || !res) {
             console.error("Drive error:", stat);
+            setIsLoadingDirections(false);
             return alert("Drive error: " + stat);
           }
           if (setDirectionsOverride) {
@@ -725,6 +1274,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
             },
           ];
           setItinerary(items);
+          setIsLoadingDirections(false);
           setShowItinerary(true);
           // Close the modal after showing itinerary
           setTimeout(() => setShowModal(false), 0);
@@ -748,8 +1298,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setRefreshmentInsertIndex,
         pendingShowAmenities,
         setPendingShowAmenities,
+        isLoadingDirections,
+        isLoadingAmenities,
         suggestRefreshments: suggestRefreshments,
         forceShowAmenities,
+        clearTripState,
         postSaveRedirectToTrips,
         setPostSaveRedirectToTrips,
   pendingPlace,
@@ -782,6 +1335,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setItinerary,
         segmentInfos,
         setSegmentInfos,
+        segmentsByLeg,
+        setSegmentsByLeg,
         savedJourneys,
         setSavedJourneys,
         showTrips,

@@ -320,6 +320,240 @@
       },
       "tags": ["fort", "heritage", "views", "lighthouse", "photography"],
       "isVerified": true
+    },
+    {
+      "name": "Margao Kadamba Bus Stand Public Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Kadamba Bus Stand, Margao",
+        "landmark": "Inside bus stand near platform 2",
+        "area": "Margao",
+        "lat": 15.2832,
+        "lng": 73.9610
+      },
+      "description": "Public toilet inside Margao Kadamba Bus Stand. Pay toilet (₹5). Clean and maintained.",
+      "details": {
+        "isFree": false,
+        "priceRange": "₹5",
+        "isClean": true,
+        "hasWater": true,
+        "openTime": "05:00",
+        "closeTime": "23:00"
+      },
+      "tags": ["toilet", "bus_stand", "margao", "south_goa", "pay_toilet"],
+      "isVerified": true
+    },
+    {
+      "name": "Margao Municipal Market Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Municipal Market, Margao",
+        "landmark": "Behind the fish market",
+        "area": "Margao",
+        "lat": 15.2819,
+        "lng": 73.9586
+      },
+      "description": "Public toilet near Margao fish/vegetable market. Basic but functional.",
+      "details": {
+        "isFree": true,
+        "isClean": false,
+        "hasWater": true,
+        "openTime": "06:00",
+        "closeTime": "21:00"
+      },
+      "tags": ["toilet", "free", "market", "margao", "south_goa"],
+      "isVerified": true
+    },
+    {
+      "name": "Vasco KTC Bus Stand Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "KTC Bus Stand, Vasco da Gama",
+        "landmark": "Inside bus terminus",
+        "area": "Vasco",
+        "lat": 15.3954,
+        "lng": 73.8145
+      },
+      "description": "Public toilet at Vasco bus station. Clean, maintained by KTC.",
+      "details": {
+        "isFree": false,
+        "priceRange": "₹5",
+        "isClean": true,
+        "hasWater": true,
+        "openTime": "05:00",
+        "closeTime": "23:00"
+      },
+      "tags": ["toilet", "bus_stand", "vasco", "south_goa"],
+      "isVerified": true
+    },
+    {
+      "name": "Colva Beach Public Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Colva Beach Road, Colva",
+        "landmark": "Near main beach entrance, opposite Menino Jesus Church",
+        "area": "Colva",
+        "lat": 15.2789,
+        "lng": 73.9127
+      },
+      "description": "Public toilet at Colva Beach entrance. Maintained by Tourism Dept. Usually clean.",
+      "details": {
+        "isFree": true,
+        "isClean": true,
+        "hasWater": true,
+        "openTime": "06:00",
+        "closeTime": "22:00"
+      },
+      "tags": ["toilet", "free", "beach", "colva", "south_goa"],
+      "isVerified": true
+    },
+    {
+      "name": "Benaulim Beach Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Benaulim Beach, South Goa",
+        "landmark": "Near beach parking area",
+        "area": "Benaulim",
+        "lat": 15.2642,
+        "lng": 73.9185
+      },
+      "description": "Public toilet at Benaulim Beach. Basic facility near parking.",
+      "details": {
+        "isFree": true,
+        "isClean": false,
+        "hasWater": true
+      },
+      "tags": ["toilet", "free", "beach", "benaulim", "south_goa"],
+      "isVerified": true
+    },
+    {
+      "name": "Dabolim Airport Public Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Goa International Airport, Dabolim",
+        "landmark": "Arrivals area and Departures area",
+        "area": "Dabolim",
+        "lat": 15.3808,
+        "lng": 73.8314
+      },
+      "description": "Clean public toilets inside Goa Airport. Free to use.",
+      "details": {
+        "isFree": true,
+        "isClean": true,
+        "hasWater": true,
+        "openTime": "00:00",
+        "closeTime": "23:59"
+      },
+      "tags": ["toilet", "free", "airport", "dabolim", "clean", "24x7"],
+      "isVerified": true
+    },
+    {
+      "name": "Majorda Beach Access Toilet",
+      "category": "toilet",
+      "subType": "public_toilet",
+      "location": {
+        "address": "Majorda Beach Road",
+        "landmark": "Near beach shacks entrance",
+        "area": "Majorda",
+        "lat": 15.3010,
+        "lng": 73.9068
+      },
+      "description": "Basic toilet at Majorda beach area. Seasonal availability.",
+      "details": {
+        "isFree": true,
+        "isClean": false,
+        "hasWater": true
+      },
+      "tags": ["toilet", "beach", "majorda", "south_goa"],
+      "isVerified": false
+    },
+    {
+      "name": "BITS Pilani Goa Campus Canteen",
+      "category": "food_vendor",
+      "subType": "canteen",
+      "location": {
+        "address": "BITS Pilani, Zuarinagar",
+        "landmark": "KK Birla Goa Campus main building",
+        "area": "Zuarinagar",
+        "lat": 15.3909,
+        "lng": 73.8786
+      },
+      "description": "College canteen open to visitors during day hours. Affordable meals.",
+      "details": {
+        "cuisine": ["indian", "snacks", "beverages"],
+        "priceRange": "₹30-100",
+        "openTime": "08:00",
+        "closeTime": "21:00"
+      },
+      "tags": ["food", "canteen", "bits", "zuarinagar", "affordable"],
+      "isVerified": true
+    },
+    {
+      "name": "Nanutel Hotel Margao",
+      "category": "rest_area",
+      "subType": "hotel",
+      "location": {
+        "address": "Near Margao Railway Station",
+        "landmark": "Opposite railway station exit",
+        "area": "Margao",
+        "lat": 15.2783,
+        "lng": 73.9612
+      },
+      "description": "Budget hotel with restaurant and public toilet. Good for quick refreshment break.",
+      "details": {
+        "isClean": true,
+        "hasWater": true,
+        "openTime": "07:00",
+        "closeTime": "23:00"
+      },
+      "tags": ["hotel", "restaurant", "toilet", "margao", "south_goa"],
+      "isVerified": true
+    },
+    {
+      "name": "Chicalim Junction Tea Stall",
+      "category": "food_vendor",
+      "subType": "tea_stall",
+      "location": {
+        "address": "Chicalim Junction, Vasco",
+        "landmark": "Bus stop area",
+        "area": "Chicalim",
+        "lat": 15.3978,
+        "lng": 73.8452
+      },
+      "description": "Simple tea and snacks stall. Popular with bus travelers.",
+      "details": {
+        "cuisine": ["tea", "snacks", "samosa"],
+        "priceRange": "₹10-30",
+        "openTime": "06:00",
+        "closeTime": "20:00"
+      },
+      "tags": ["tea", "snacks", "bus_stop", "chicalim", "cheap"],
+      "isVerified": false
+    },
+    {
+      "name": "Colva Beach",
+      "category": "beach_access",
+      "subType": "beach",
+      "location": {
+        "address": "Colva Beach, South Goa",
+        "landmark": "Main beach entrance",
+        "area": "Colva",
+        "lat": 15.2789,
+        "lng": 73.9221
+      },
+      "description": "Popular beach in South Goa. White sand, calm waters. Multiple shacks with food and toilets.",
+      "details": {
+        "isFree": true,
+        "hasBenches": true
+      },
+      "tags": ["beach", "free", "south_goa", "popular", "shacks"],
+      "isVerified": true
     }
   ],
   "knownLocations": {

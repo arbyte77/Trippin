@@ -2,7 +2,7 @@
 import React, { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTripContext } from "../context/TripContext";
-import { Bus, Car, Footprints, Bike, MapPin } from "lucide-react";
+import { Bus, Car, Footprints, Bike, MapPin, Loader2 } from "lucide-react";
 import MiniRouteMap from "./MiniRouteMap";
 
 interface ItineraryItem {
@@ -32,6 +32,7 @@ export default function ItineraryView({
     travelMode,
     directions,
     directionsSegments,
+    segmentsByLeg,
     origin,
     destination,
     waypoints,
@@ -46,6 +47,7 @@ export default function ItineraryView({
     setPendingShowAmenities,
     setPostSaveRedirectToTrips,
     forceShowAmenities,
+    isLoadingDirections,
   } = useTripContext();
 
   const nodes = useMemo(() => {
@@ -55,56 +57,101 @@ export default function ItineraryView({
 
   const noTransitFound = useMemo(() => {
     if (travelMode !== "TRANSIT") return false;
-    if (!directionsSegments || directionsSegments.length === 0) return true;
-    return !directionsSegments.some((seg) =>
+    // Don't show warning if we have no segments yet (e.g., viewing saved trip without recalculation)
+    if (!directionsSegments || directionsSegments.length === 0) return false;
+    // Only show warning if we have segments but NONE of them contain transit
+    const hasAnyTransit = directionsSegments.some((seg) =>
       (seg.routes?.[0]?.legs?.[0]?.steps || []).some(
         (s: any) => s.travel_mode === google.maps.TravelMode.TRANSIT || s.travel_mode === "TRANSIT"
       )
     );
+    return !hasAnyTransit;
   }, [travelMode, directionsSegments]);
 
   const legItems = useMemo(() => {
     if (travelMode === "TRANSIT") {
-      // One summary per segment (between nodes)
-      return directionsSegments.map((seg) => {
-        const leg = seg.routes?.[0]?.legs?.[0];
-        if (!leg) return { mode: "WALK" as const, label: "Walk", subtext: "" };
-        const hasTransit = (leg.steps || []).some(
-          (s: any) => s.travel_mode === google.maps.TravelMode.TRANSIT || s.travel_mode === "TRANSIT"
-        );
-        const d = leg.distance?.text || "";
-        const t = leg.duration?.text || "";
+      // Group segments by leg using segmentsByLeg, then produce one summary per leg
+      const numLegs = nodes.length - 1; // Number of legs = nodes - 1
+      const items: { mode: "BUS" | "WALK" | "CAB"; label: string; subtext: string }[] = [];
+      
+      // Calculate segment ranges for each leg
+      let segmentIndex = 0;
+      for (let legIdx = 0; legIdx < numLegs; legIdx++) {
+        const segCount = segmentsByLeg[legIdx] || 1;
+        const legSegments = directionsSegments.slice(segmentIndex, segmentIndex + segCount);
+        segmentIndex += segCount;
+        
+        // Aggregate data for this leg
+        let totalDistM = 0;
+        let totalDurS = 0;
+        let hasTransit = false;
+        let busLabel = "";
+        let boardStop = "";
+        let boardTime = "";
+        
+        legSegments.forEach((seg) => {
+          const leg = seg.routes?.[0]?.legs?.[0];
+          if (!leg) return;
+          totalDistM += leg.distance?.value || 0;
+          totalDurS += leg.duration?.value || 0;
+          
+          (leg.steps || []).forEach((step: any) => {
+            if (step.travel_mode === google.maps.TravelMode.TRANSIT || step.travel_mode === "TRANSIT") {
+              hasTransit = true;
+              const tr = step.transit;
+              if (!busLabel && tr?.line) {
+                busLabel = `Bus ${tr.line.short_name || tr.line.name || ""}`;
+              }
+              if (!boardStop && tr?.departure_stop?.name) {
+                boardStop = tr.departure_stop.name;
+              }
+              if (!boardTime && tr?.departure_time?.text) {
+                boardTime = tr.departure_time.text;
+              }
+            }
+          });
+        });
+        
+        // Format distance and time
+        const distStr = totalDistM >= 1000 
+          ? `${(totalDistM / 1000).toFixed(1)} km` 
+          : `${Math.round(totalDistM)} m`;
+        const durMins = Math.round(totalDurS / 60);
+        const durStr = durMins >= 60 
+          ? `${Math.floor(durMins / 60)} hr ${durMins % 60} mins`
+          : `${durMins} mins`;
+        
         let subtext = "";
-        // Try to find a boarding time from the first transit step
-        const firstTransit = (leg.steps || []).find(
-          (s: any) => s.travel_mode === google.maps.TravelMode.TRANSIT || s.travel_mode === "TRANSIT"
-        ) as google.maps.DirectionsStep | undefined;
-        // @ts-ignore
-        const tr = firstTransit?.transit;
-        const boardStop = tr?.departure_stop?.name;
-        const boardTime = tr?.departure_time?.text;
         if (boardStop || boardTime) {
           const parts: string[] = [];
           if (boardStop) parts.push(`Board @ ${boardStop}`);
           if (boardTime) parts.push(boardTime);
           subtext = parts.join(" • ");
         }
+        
         if (hasTransit) {
-          // Choose a representative bus label if present
-          let busLabel = "Bus";
-          for (const step of leg.steps || []) {
-            if (step.travel_mode === google.maps.TravelMode.TRANSIT || (step as any).travel_mode === "TRANSIT") {
-              // @ts-ignore
-              const tr = step.transit;
-              const bus = tr?.line?.short_name || tr?.line?.name || "Bus";
-              busLabel = `Bus ${bus}`;
-              break;
-            }
-          }
-          return { mode: "BUS" as const, label: `${busLabel} • ${d} • ${t}`, subtext };
+          items.push({ 
+            mode: "BUS", 
+            label: `${busLabel || "Bus"} • ${distStr} • ${durStr}`, 
+            subtext 
+          });
+        } else if (totalDistM > 3000) {
+          // Long walk - suggest cab
+          items.push({ 
+            mode: "CAB", 
+            label: `Cab recommended • ${distStr} • ~${Math.round(durMins / 3)} mins by car`, 
+            subtext: "" 
+          });
+        } else {
+          items.push({ 
+            mode: "WALK", 
+            label: `Walk • ${distStr} • ${durStr}`, 
+            subtext: "" 
+          });
         }
-        return { mode: "WALK" as const, label: `Walk • ${d} • ${t}`, subtext };
-      });
+      }
+      
+      return items;
     } else if (directions) {
       const legs = directions.routes?.[0]?.legs || [];
       const mode =
@@ -121,75 +168,180 @@ export default function ItineraryView({
       });
     }
     return [];
-  }, [travelMode, directions, directionsSegments]);
+  }, [travelMode, directions, directionsSegments, segmentsByLeg, nodes]);
+
+  // Helper to extract steps from a single DirectionsResult segment
+  const extractStepsFromSegment = (seg: google.maps.DirectionsResult) => {
+    const leg = seg.routes?.[0]?.legs?.[0];
+    const items: {
+      mode: "WALK" | "BUS" | "CAB";
+      label: string;
+      subtext?: string;
+      boardStop?: string;
+      boardTime?: string;
+      alightStop?: string;
+      alightTime?: string;
+    }[] = [];
+    if (!leg) return items;
+    let walkDistMeters = 0;
+    let walkDurSec = 0;
+    const flushWalk = () => {
+      if (walkDistMeters === 0 && walkDurSec === 0) return;
+      const mins = Math.round(walkDurSec / 60);
+      // Format distance nicely
+      const distStr = walkDistMeters >= 1000 
+        ? `${(walkDistMeters / 1000).toFixed(1)} km` 
+        : `${Math.round(walkDistMeters)} m`;
+      // If walk is > 3km, suggest cab instead
+      if (walkDistMeters > 3000) {
+        const label = `Cab recommended • ${distStr} • ~${Math.round(mins / 3)} mins by car`;
+        items.push({ mode: "CAB", label });
+      } else {
+        const label = `Walk • ${distStr} • ${mins} mins${mins > 30 ? " • Suggest Cab" : ""}`;
+        items.push({ mode: "WALK", label });
+      }
+      walkDistMeters = 0;
+      walkDurSec = 0;
+    };
+    (leg.steps || []).forEach((step: any) => {
+      if (step.travel_mode === google.maps.TravelMode.WALKING || step.travel_mode === "WALKING") {
+        // Sum up walking distance in meters for cleaner display
+        walkDistMeters += step.distance?.value || 0;
+        walkDurSec += step.duration?.value || 0;
+      } else if (step.travel_mode === google.maps.TravelMode.TRANSIT || step.travel_mode === "TRANSIT") {
+        flushWalk();
+        const tr = step.transit;
+        if (!tr) return;
+        const bus = tr.line?.short_name || tr.line?.name || "Bus";
+        const d = step.distance?.text || "";
+        const t = step.duration?.text || "";
+        const boardStop = tr.departure_stop?.name;
+        const boardTime = tr.departure_time?.text;
+        const alightStop = tr.arrival_stop?.name;
+        const alightTime = tr.arrival_time?.text;
+        const subtext = [boardStop ? `Board @ ${boardStop}` : "", boardTime || ""]
+          .filter(Boolean)
+          .join(" • ");
+        items.push({
+          mode: "BUS",
+          label: `Bus ${bus} • ${d} • ${t}`,
+          subtext,
+          boardStop,
+          boardTime,
+          alightStop,
+          alightTime,
+        });
+      }
+    });
+    flushWalk();
+    
+    // If this segment has no transit and is just a walking-only segment, 
+    // ensure we show it (handles the final walk from bus stop to destination)
+    if (items.length === 0 && leg.distance?.value) {
+      const distM = leg.distance.value;
+      const durSec = leg.duration?.value || 0;
+      const mins = Math.round(durSec / 60);
+      const distStr = distM >= 1000 
+        ? `${(distM / 1000).toFixed(1)} km` 
+        : `${Math.round(distM)} m`;
+      if (distM > 3000) {
+        items.push({ mode: "CAB", label: `Cab recommended • ${distStr} • ~${Math.round(mins / 3)} mins by car` });
+      } else {
+        items.push({ mode: "WALK", label: `Walk • ${distStr} • ${mins} mins${mins > 30 ? " • Suggest Cab" : ""}` });
+      }
+    }
+    return items;
+  };
 
   // Detailed transit steps per leg (Board/Walk/Ride details)
+  // Groups segments by leg using segmentsByLeg tracking from context
   const transitStepsByLeg = useMemo(() => {
     if (travelMode !== "TRANSIT") return [];
-    return directionsSegments.map((seg) => {
-      const leg = seg.routes?.[0]?.legs?.[0];
-      const items: {
-        mode: "WALK" | "BUS";
-        label: string;
-        subtext?: string;
-        boardStop?: string;
-        boardTime?: string;
-        alightStop?: string;
-        alightTime?: string;
-      }[] = [];
-      if (!leg) return items;
-      let walkDistParts: string[] = [];
-      let walkDurSec = 0;
-      const flushWalk = () => {
-        if (!walkDistParts.length) return;
-        const mins = Math.round(walkDurSec / 60);
-        const label = `Walk • ${walkDistParts.join(" + ")} • ${mins} mins${mins > 30 ? " • Suggest Cab" : ""}`;
-        items.push({ mode: "WALK", label });
-        walkDistParts = [];
-        walkDurSec = 0;
-      };
-      (leg.steps || []).forEach((step: any) => {
-        if (step.travel_mode === google.maps.TravelMode.WALKING || step.travel_mode === "WALKING") {
-          const d = step.distance?.text || "";
-          walkDistParts.push(d);
-          walkDurSec += step.duration?.value || 0;
-        } else if (step.travel_mode === google.maps.TravelMode.TRANSIT || step.travel_mode === "TRANSIT") {
-          flushWalk();
-          const tr = step.transit;
-          if (!tr) return;
-          const bus = tr.line?.short_name || tr.line?.name || "Bus";
-          const d = step.distance?.text || "";
-          const t = step.duration?.text || "";
-          const boardStop = tr.departure_stop?.name;
-          const boardTime = tr.departure_time?.text;
-          const alightStop = tr.arrival_stop?.name;
-          const alightTime = tr.arrival_time?.text;
-          const subtext = [boardStop ? `Board @ ${boardStop}` : "", boardTime || ""]
-            .filter(Boolean)
-            .join(" • ");
-          items.push({
-            mode: "BUS",
-            label: `Bus ${bus} • ${d} • ${t}`,
-            subtext,
-            boardStop,
-            boardTime,
-            alightStop,
-            alightTime,
-          });
+    
+    const numLegs = nodes.length - 1; // number of node-pairs
+    
+    // If we have segmentsByLeg tracking, use it for accurate grouping
+    if (segmentsByLeg && segmentsByLeg.length === numLegs) {
+      const result: ReturnType<typeof extractStepsFromSegment>[] = [];
+      let segmentIndex = 0;
+      
+      for (let leg = 0; leg < numLegs; leg++) {
+        const segmentCount = segmentsByLeg[leg] || 1;
+        const legSteps: ReturnType<typeof extractStepsFromSegment> = [];
+        
+        // Collect all steps from all segments belonging to this leg
+        for (let s = 0; s < segmentCount && segmentIndex < directionsSegments.length; s++) {
+          legSteps.push(...extractStepsFromSegment(directionsSegments[segmentIndex]));
+          segmentIndex++;
         }
-      });
-      flushWalk();
-      return items;
-    });
-  }, [travelMode, directionsSegments]);
+        
+        result.push(legSteps);
+      }
+      
+      return result;
+    }
+    
+    // Fallback: if segmentsByLeg not available, use simple heuristics
+    const numSegments = directionsSegments.length;
+    
+    // If there are more segments than legs, we have multi-segment routing (like via hub)
+    // In this case, distribute segments evenly or combine them
+    if (numSegments > numLegs && numLegs > 0) {
+      // Simple case: all segments belong to single leg
+      if (numLegs === 1) {
+        const allSteps: ReturnType<typeof extractStepsFromSegment> = [];
+        directionsSegments.forEach((seg) => {
+          allSteps.push(...extractStepsFromSegment(seg));
+        });
+        return [allSteps];
+      }
+      
+      // Multiple legs with more segments - try to distribute
+      // This is a fallback, segmentsByLeg should handle this properly
+      const segmentsPerLeg = Math.ceil(numSegments / numLegs);
+      const result: ReturnType<typeof extractStepsFromSegment>[] = [];
+      
+      for (let leg = 0; leg < numLegs; leg++) {
+        const startIdx = leg * segmentsPerLeg;
+        const endIdx = Math.min(startIdx + segmentsPerLeg, numSegments);
+        const legSteps: ReturnType<typeof extractStepsFromSegment> = [];
+        
+        for (let s = startIdx; s < endIdx; s++) {
+          if (directionsSegments[s]) {
+            legSteps.push(...extractStepsFromSegment(directionsSegments[s]));
+          }
+        }
+        
+        result.push(legSteps);
+      }
+      
+      return result;
+    }
+    
+    // Standard case: one segment per leg
+    return directionsSegments.map((seg) => extractStepsFromSegment(seg));
+  }, [travelMode, directionsSegments, nodes.length, segmentsByLeg]);
 
   if (!showItinerary) return null;
 
+  // Show loading state while directions are being calculated
+  if (isLoadingDirections) {
+    return (
+      <div className="p-6 bg-white">
+        <h2 className="text-2xl font-bold mb-4 text-gray-900">Your Itinerary</h2>
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-4" />
+          <p className="text-gray-600">Calculating route...</p>
+        </div>
+      </div>
+    );
+  }
+
   const ModeIcon = (mode: string, label: string) => {
     if (mode === "BUS") return <Bus className="h-4 w-4 text-blue-600" />;
-    if (mode === "Car") return <Car className="h-4 w-4 text-gray-800" />;
+    if (mode === "CAB" || mode === "Car") return <Car className="h-4 w-4 text-gray-800" />;
     if (mode === "Bike") return <Bike className="h-4 w-4 text-emerald-600" />;
-    if (mode === "Walk" || label.startsWith("Walk")) return <Footprints className="h-4 w-4 text-orange-600" />;
+    if (mode === "WALK" || mode === "Walk" || label.startsWith("Walk")) return <Footprints className="h-4 w-4 text-orange-600" />;
     return <Car className="h-4 w-4 text-gray-800" />;
   };
 
