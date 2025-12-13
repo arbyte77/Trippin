@@ -17,6 +17,7 @@ export default function HomePage() {
   });
   const {
     setWaypoints,
+    setWaypointNames,
     setStopTimes,
     showModal,
     setShowModal,
@@ -28,6 +29,7 @@ export default function HomePage() {
     setOriginTime,
     destination,
     setDestination,
+    setDestinationName,
     destinationTime,
     setDestinationTime,
     waypoints,
@@ -53,6 +55,7 @@ export default function HomePage() {
     setDirections,
     setDirectionsSegments,
     setExtraMarkers,
+    setEditingJourneyId,
   } = useTripContext();
 
   // Recalculation is now handled by AppShell (always mounted)
@@ -76,9 +79,12 @@ export default function HomePage() {
                 <button
                   onClick={() => {
                     setShowTrips(false);
+                    setEditingJourneyId(trip._id);
                     setOrigin(trip.start);
                     setDestination(trip.destination);
+                    setDestinationName(trip.destinationName || "");
                     setWaypoints(trip.waypoints || []);
+                    setWaypointNames(trip.waypointNames || {});
                     setStopTimes(trip.stopTimes || []);
                     setTravelMode(trip.travelMode);
                     setFilterOption(trip.filterOption);

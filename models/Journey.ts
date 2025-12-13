@@ -4,7 +4,9 @@ const JourneySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   start: { type: String, required: true },
   destination: { type: String, required: true },
+  destinationName: { type: String, default: "" }, // Display name for destination (if different from destination value)
   waypoints: [{ type: String }],
+  waypointNamesJson: { type: String, default: "{}" }, // JSON string of waypoint index -> display name mapping
   stopTimes: [
     {
       arriveBy: { type: String },

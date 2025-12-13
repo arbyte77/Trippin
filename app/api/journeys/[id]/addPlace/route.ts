@@ -7,7 +7,7 @@ import Place from "@/models/Place";
 import { authOptions } from "@/app/api/auth/authOptions";
 
 // POST /api/journeys/:id/addPlace
-export async function POST(request: NextRequest, context: { params: { id: string } }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ message: "Not authenticated" }, { status: 401 });
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, context: { params: { id: string
   const user = await User.findOne({ email: session.user?.email });
   if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
-  const { id } = context.params;
+  const { id } = await context.params;
   const body = await request.json();
   if (!body) return NextResponse.json({ message: "Missing body" }, { status: 400 });
 
@@ -54,12 +54,16 @@ export async function POST(request: NextRequest, context: { params: { id: string
   // Keep the display name for itinerary text
   const placeName = body.place?.name || placeLocation;
 
+  // Get the display name from the request (if provided)
+  const displayName = body.place?.displayName || body.place?.name || placeLocation;
+
   // find journey owned by user
   const journey = await Journey.findOne({ _id: id, userId: user._id });
   if (!journey) return NextResponse.json({ message: "Journey not found" }, { status: 404 });
 
   journey.waypoints = journey.waypoints || [];
   journey.stopTimes = journey.stopTimes || [];
+  journey.waypointNames = journey.waypointNames || {};
 
   // Build interval-aware insertion logic.
   // If the caller provided a stopTime (arriveBy or leaveBy), try to fit the new place
@@ -71,19 +75,60 @@ export async function POST(request: NextRequest, context: { params: { id: string
   if (typeof requestedIndex === "number" && requestedIndex >= 0) {
     // Special case: requestedIndex === waypoints.length + 1 means "after destination"
     if (requestedIndex === (journey.waypoints?.length || 0) + 1) {
-      journey.waypoints = journey.waypoints || [];
-      journey.stopTimes = journey.stopTimes || [];
+      const currentWaypoints = journey.waypoints || [];
+      const currentStopTimes = journey.stopTimes || [];
+      
+      // Parse existing waypointNames from JSON
+      const existingNames: Record<string, string> = JSON.parse(journey.waypointNamesJson || "{}");
+      
+      const newWaypoints = [...currentWaypoints];
+      const newStopTimes = [...currentStopTimes];
+      const newWaypointNames: Record<string, string> = { ...existingNames };
+      
       if (journey.destination) {
-        journey.waypoints.push(journey.destination);
-        journey.stopTimes.push({ arriveBy: "", leaveBy: "" });
+        // Move current destination to waypoints
+        const currentWaypointsLength = newWaypoints.length;
+        newWaypoints.push(journey.destination);
+        newStopTimes.push({ arriveBy: "", leaveBy: "" });
+        // If destination had a name, add it to waypointNames
+        if (journey.destinationName) {
+          newWaypointNames[String(currentWaypointsLength)] = journey.destinationName;
+        }
       }
-      journey.destination = placeLocation;
-      // textual itinerary: append a note
+      
+      // Convert to JSON string for storage
+      const newWaypointNamesJson = JSON.stringify(newWaypointNames);
+      
+      // Update itinerary
       const entry = `${placeName}: Added via Explore`;
-      if (!journey.itinerary) journey.itinerary = entry;
-      else journey.itinerary = `${journey.itinerary}\n${entry}`;
-      await journey.save();
-      return NextResponse.json({ message: "added", journey }, { status: 200 });
+      const newItinerary = journey.itinerary ? `${journey.itinerary}\n${entry}` : entry;
+      
+      console.log('[addPlace] After destination: waypointNames:', newWaypointNamesJson);
+      console.log('[addPlace] destinationName:', displayName);
+      
+      // Use findOneAndUpdate with $set
+      const updated = await Journey.findOneAndUpdate(
+        { _id: id, userId: user._id },
+        {
+          $set: {
+            waypoints: newWaypoints,
+            stopTimes: newStopTimes,
+            waypointNamesJson: newWaypointNamesJson,
+            destination: placeLocation,
+            destinationName: displayName,
+            itinerary: newItinerary,
+          },
+        },
+        { new: true }
+      ).lean();
+      
+      // Parse JSON for response
+      const waypointNamesObj = JSON.parse((updated as any)?.waypointNamesJson || "{}");
+      
+      return NextResponse.json({ 
+        message: "added", 
+        journey: updated ? { ...updated, waypointNames: waypointNamesObj } : null 
+      }, { status: 200 });
     }
     insertAt = Math.min(requestedIndex, journey.waypoints.length);
   } else if (providedStop) {
@@ -129,19 +174,66 @@ export async function POST(request: NextRequest, context: { params: { id: string
   // ensure insertAt is defined for TypeScript and runtime safety
   if (typeof insertAt === "undefined") insertAt = journey.waypoints.length;
 
-  journey.waypoints.splice(insertAt, 0, placeLocation);
-  journey.stopTimes.splice(insertAt, 0, providedStop || { arriveBy: "", leaveBy: "" });
-  // update itinerary textual lines to keep in sync
+  // Build new arrays with the insertion
+  const newWaypoints = [...(journey.waypoints || [])];
+  newWaypoints.splice(insertAt, 0, placeLocation);
+  
+  const newStopTimes = [...(journey.stopTimes || [])];
+  newStopTimes.splice(insertAt, 0, providedStop || { arriveBy: "", leaveBy: "" });
+  
+  // Update waypointNames: parse from JSON, shift existing names, add new name
+  const existingNames: Record<string, string> = JSON.parse(journey.waypointNamesJson || "{}");
+  
+  const newWaypointNames: Record<string, string> = {};
+  Object.entries(existingNames).forEach(([key, val]) => {
+    const k = parseInt(key, 10);
+    if (k >= insertAt!) {
+      newWaypointNames[String(k + 1)] = val; // Shift up
+    } else {
+      newWaypointNames[String(k)] = val; // Keep as-is
+    }
+  });
+  // Add the new display name at insertAt
+  newWaypointNames[String(insertAt)] = displayName;
+  
+  // Convert back to JSON string for storage
+  const newWaypointNamesJson = JSON.stringify(newWaypointNames);
+  
+  console.log('[addPlace] Saving waypointNames:', newWaypointNamesJson);
+  
+  // Update itinerary textual lines to keep in sync
   const entry = `${placeName}: Added via Explore`;
-  if (!journey.itinerary) journey.itinerary = entry;
-  else {
-    const lines = journey.itinerary.split("\n");
-    if (insertAt && insertAt>= lines.length) lines.push(entry);
+  let newItinerary = journey.itinerary || "";
+  if (!newItinerary) {
+    newItinerary = entry;
+  } else {
+    const lines = newItinerary.split("\n");
+    if (insertAt >= lines.length) lines.push(entry);
     else lines.splice(insertAt, 0, entry);
-    journey.itinerary = lines.join("\n");
+    newItinerary = lines.join("\n");
   }
 
-  await journey.save();
+  // Use findOneAndUpdate with $set
+  const updated = await Journey.findOneAndUpdate(
+    { _id: id, userId: user._id },
+    {
+      $set: {
+        waypoints: newWaypoints,
+        stopTimes: newStopTimes,
+        waypointNamesJson: newWaypointNamesJson,
+        itinerary: newItinerary,
+      },
+    },
+    { new: true }
+  ).lean();
 
-  return NextResponse.json({ message: "added", journey }, { status: 200 });
+  // Parse JSON for response
+  const waypointNamesObj = JSON.parse((updated as any)?.waypointNamesJson || "{}");
+
+  console.log('[addPlace] Updated journey waypointNames:', JSON.stringify(waypointNamesObj));
+
+  return NextResponse.json({ 
+    message: "added", 
+    journey: updated ? { ...updated, waypointNames: waypointNamesObj } : null 
+  }, { status: 200 });
 }

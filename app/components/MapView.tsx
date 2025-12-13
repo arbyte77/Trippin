@@ -1,6 +1,6 @@
 "use client";
 import React, { useMemo } from "react";
-import { GoogleMap, DirectionsRenderer, Marker } from "@react-google-maps/api";
+import { GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
 
 import { useTripContext } from "../context/TripContext";
 
@@ -39,6 +39,33 @@ const ORIGIN_BLUE_DOT = createOriginMarker();
 
 // Bus stop icon URL
 const BUS_STOP_ICON = "https://maps.google.com/mapfiles/kml/shapes/bus.png";
+
+// Category-based amenity marker icons (diamond shape)
+const createAmenityMarker = (category: string) => {
+  const categoryColors: Record<string, string> = {
+    toilet: "#9C27B0",        // Purple
+    drinking_water: "#2196F3", // Blue
+    food_vendor: "#FF9800",   // Orange
+    dhaba: "#FF5722",         // Deep orange
+    restaurant: "#E91E63",    // Pink
+    cafe: "#795548",          // Brown
+    park: "#4CAF50",          // Green
+    temple: "#FF5722",        // Deep orange
+    church: "#9E9E9E",        // Gray
+    beach_access: "#00BCD4",  // Cyan
+    rest_area: "#8BC34A",     // Light green
+    market: "#FFC107",        // Amber
+    default: "#607D8B",       // Blue gray
+  };
+  const color = categoryColors[category?.toLowerCase()] || categoryColors.default;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <path fill="${color}" stroke="#FFFFFF" stroke-width="1.5" d="M12 2 L22 12 L12 22 L2 12 Z"/>
+      <circle fill="#FFFFFF" cx="12" cy="12" r="4"/>
+    </svg>
+  `;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
 
 export default function MapView({ showItinerary, containerStyle, defaultCenter, icon }: MapViewProps) {
   const { directions, directionsSegments, segmentsByLeg, extraMarkers, travelMode, origin, destination, waypoints } = useTripContext();
@@ -199,20 +226,114 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
     return markers;
   }, [travelMode, directions, directionsSegments, segmentsByLeg, waypoints]);
 
+  // Analyze segments to determine which are walking-only vs transit
+  const segmentAnalysis = useMemo(() => {
+    if (travelMode !== "TRANSIT" || directionsSegments.length === 0) {
+      return [];
+    }
+    
+    return directionsSegments.map((seg) => {
+      const leg = seg.routes?.[0]?.legs?.[0];
+      if (!leg) return { isWalkingOnly: false, path: [] };
+      
+      // Check if this segment has any transit steps
+      const hasTransit = (leg.steps || []).some((step: any) => 
+        step.travel_mode === google.maps.TravelMode.TRANSIT || 
+        step.travel_mode === "TRANSIT"
+      );
+      
+      // If no transit, this is a walking-only segment
+      if (!hasTransit) {
+        // Extract the path from all steps for custom rendering
+        const path: google.maps.LatLngLiteral[] = [];
+        (leg.steps || []).forEach((step: any) => {
+          if (step.path) {
+            step.path.forEach((point: google.maps.LatLng) => {
+              path.push({ lat: point.lat(), lng: point.lng() });
+            });
+          } else if (step.start_location && step.end_location) {
+            // Fallback: use start and end locations
+            path.push({ 
+              lat: step.start_location.lat(), 
+              lng: step.start_location.lng() 
+            });
+            path.push({ 
+              lat: step.end_location.lat(), 
+              lng: step.end_location.lng() 
+            });
+          }
+        });
+        
+        // If path is empty, use leg start/end
+        if (path.length === 0 && leg.start_location && leg.end_location) {
+          path.push({ 
+            lat: leg.start_location.lat(), 
+            lng: leg.start_location.lng() 
+          });
+          path.push({ 
+            lat: leg.end_location.lat(), 
+            lng: leg.end_location.lng() 
+          });
+        }
+        
+        return { isWalkingOnly: true, path };
+      }
+      
+      return { isWalkingOnly: false, path: [] };
+    });
+  }, [travelMode, directionsSegments]);
+
   if (showItinerary) return null;
+  
+  // Walking polyline style (dotted blue line)
+  const walkingPolylineOptions: google.maps.PolylineOptions = {
+    strokeColor: "#4285F4",
+    strokeOpacity: 0,
+    strokeWeight: 4,
+    icons: [
+      {
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: "#4285F4",
+          fillOpacity: 1,
+          strokeColor: "#4285F4",
+          strokeOpacity: 1,
+          scale: 3,
+        },
+        offset: "0",
+        repeat: "12px",
+      },
+    ],
+  };
   
   return (
     <div className="mt-4">
       <GoogleMap mapContainerStyle={containerStyle} center={defaultCenter} zoom={14}>
-        {/* Render route lines without default markers */}
+        {/* Render route lines - transit segments use DirectionsRenderer, walking uses dotted Polyline */}
         {travelMode === "TRANSIT" && directionsSegments.length > 0
-          ? directionsSegments.map((seg, idx) => (
-              <DirectionsRenderer
-                key={idx}
-                directions={seg}
-                options={{ suppressMarkers: true, preserveViewport: false }}
-              />
-            ))
+          ? directionsSegments.map((seg, idx) => {
+              const analysis = segmentAnalysis[idx];
+              
+              // Walking-only segment: render as dotted polyline
+              if (analysis?.isWalkingOnly && analysis.path.length > 0) {
+                return (
+                  <Polyline
+                    key={`walk-${idx}`}
+                    path={analysis.path}
+                    options={walkingPolylineOptions}
+                  />
+                );
+              }
+              
+              // Transit segment: use DirectionsRenderer
+              return (
+                <DirectionsRenderer
+                  key={idx}
+                  directions={seg}
+                  options={{ suppressMarkers: true, preserveViewport: false }}
+                />
+              );
+            })
           : directions && (
               <DirectionsRenderer
                 directions={directions}
@@ -240,9 +361,18 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
           />
         ))}
         
-        {/* Extra markers from context */}
-        {extraMarkers.map((marker, idx) => (
-          <Marker key={`extra-${idx}`} position={marker.position} icon={icon} />
+        {/* Amenity markers from context */}
+        {extraMarkers.map((marker: any, idx) => (
+          <Marker 
+            key={`amenity-${idx}`} 
+            position={marker.position} 
+            icon={{
+              url: createAmenityMarker(marker.category || "default"),
+              scaledSize: new google.maps.Size(28, 28),
+              anchor: new google.maps.Point(14, 14),
+            }}
+            title={marker.name || "Amenity"}
+          />
         ))}
       </GoogleMap>
     </div>

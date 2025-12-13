@@ -209,36 +209,95 @@ export async function GET(req: NextRequest) {
           const lat0 = centerLike?.lat;
           const lng0 = centerLike?.lon;
           if (!Number.isFinite(lat0) || !Number.isFinite(lng0)) return null;
+          
+          // Build full address from OSM tags
+          const addrParts = [
+            tags["addr:housenumber"],
+            tags["addr:street"],
+            tags["addr:city"] || tags["addr:suburb"],
+            tags["addr:postcode"],
+          ].filter(Boolean);
+          const fullAddress = tags["addr:full"] || addrParts.join(", ") || "";
+          
+          // Parse opening hours (OSM format can be complex, but try to extract useful info)
+          const openingHours = tags["opening_hours"] || "";
+          let openTime = "";
+          let closeTime = "";
+          // Simple parsing for common format like "Mo-Fr 09:00-18:00"
+          const hoursMatch = openingHours.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+          if (hoursMatch) {
+            openTime = hoursMatch[1];
+            closeTime = hoursMatch[2];
+          }
+          
+          // Determine cost level
+          let costLevel = "Unknown";
+          if (tags.fee === "no" || tags.access === "yes" || type === "park" || type === "garden" || type === "beach") {
+            costLevel = "Free";
+          } else if (tags.fee === "yes") {
+            costLevel = "Paid";
+          }
+          
+          // Build description from available tags
+          const descParts = [];
+          if (tags.description) descParts.push(tags.description);
+          if (tags.cuisine) descParts.push(`Cuisine: ${tags.cuisine.replace(/;/g, ", ")}`);
+          if (tags.diet) descParts.push(`Diet options: ${tags.diet}`);
+          if (tags.outdoor_seating === "yes") descParts.push("Outdoor seating available");
+          if (tags.takeaway === "yes") descParts.push("Takeaway available");
+          if (tags.delivery === "yes") descParts.push("Delivery available");
+          if (tags.wheelchair === "yes") descParts.push("Wheelchair accessible");
+          const description = descParts.join(". ");
+          
+          // Build details object (similar to our seed data format)
+          const details: any = {};
+          if (openTime) details.openTime = openTime;
+          if (closeTime) details.closeTime = closeTime;
+          if (tags.fee === "no") details.isFree = true;
+          if (tags.fee === "yes") details.isFree = false;
+          if (tags.cuisine) details.cuisine = tags.cuisine.split(";").map((c: string) => c.trim());
+          if (tags.phone) details.phone = tags.phone;
+          if (tags.website) details.website = tags.website;
+          if (tags.wheelchair) details.wheelchair = tags.wheelchair === "yes";
+          if (tags.outdoor_seating) details.outdoorSeating = tags.outdoor_seating === "yes";
+          if (tags.takeaway) details.takeaway = tags.takeaway === "yes";
+          if (tags.delivery) details.delivery = tags.delivery === "yes";
+          if (openingHours) details.openingHoursRaw = openingHours;
+          
+          // Build meaningful tags array (filter out less useful ones)
+          const usefulTags = [
+            tags.amenity, tags.shop, tags.leisure, tags.tourism, tags.natural,
+            tags.cuisine, tags.diet,
+            tags.takeaway === "yes" ? "takeaway" : null,
+            tags.delivery === "yes" ? "delivery" : null,
+            tags.outdoor_seating === "yes" ? "outdoor_seating" : null,
+            tags.wheelchair === "yes" ? "wheelchair_accessible" : null,
+            tags.internet_access === "yes" || tags.internet_access === "wlan" ? "wifi" : null,
+          ].filter(Boolean);
+          
           return {
             name: name || type,
             type,
             location: {
-              address: tags["addr:full"] || tags["addr:street"] || "",
+              address: fullAddress,
+              landmark: tags["addr:place"] || tags["addr:suburb"] || "",
+              area: tags["addr:city"] || tags["addr:suburb"] || "",
               lat: lat0,
               lng: lng0,
             },
-            description: tags["description"] || "",
-            costLevel: "Unknown",
+            description,
+            costLevel,
             imageUrl: "",
-            tags: Object.keys(tags),
+            tags: usefulTags,
             external_place_id: `osm:${el.type}:${el.id}`,
             source: "overpass",
-            category,
+            category: type, // Use the actual type (restaurant, cafe, etc.) as category
+            details,
+            isVerified: false, // OSM data is community-contributed
           };
         })
         .filter(Boolean);
-      return transformed as Array<{
-        name: string;
-        type: string;
-        location: { address: string; lat: number; lng: number };
-        description: string;
-        costLevel: string;
-        imageUrl: string;
-        tags: string[];
-        external_place_id: string;
-        source: string;
-        category: string;
-      }>;
+      return transformed;
     }
 
     // ============================================
@@ -334,10 +393,22 @@ export async function GET(req: NextRequest) {
 
     // Execute all providers in parallel
     const [goaLocalResults, overpassResults, googleResults] = await Promise.all([
-      fetchGoaLocal().catch(() => []),
-      fetchOverpass().catch(() => []),
-      fetchGooglePlaces().catch(() => []),
+      fetchGoaLocal().catch((e) => { console.error('[amenities] Goa local error:', e); return []; }),
+      fetchOverpass().catch((e) => { console.error('[amenities] Overpass error:', e); return []; }),
+      fetchGooglePlaces().catch((e) => { console.error('[amenities] Google error:', e); return []; }),
     ]);
+    
+    console.log(`[amenities] Results: goaLocal=${goaLocalResults.length}, overpass=${overpassResults.length}, google=${googleResults.length}`);
+    
+    // Log a sample of what we got from each source
+    if (overpassResults.length > 0) {
+      const restaurants = overpassResults.filter((r: any) => r.type === 'restaurant' || r.type === 'cafe');
+      console.log(`[amenities] Overpass restaurants/cafes: ${restaurants.length}`);
+    }
+    if (googleResults.length > 0) {
+      const restaurants = googleResults.filter((r: any) => r.type === 'restaurant' || r.tags?.includes('restaurant'));
+      console.log(`[amenities] Google restaurants: ${restaurants.length}`);
+    }
 
     // Deduplicate by external_place_id or name+lat/lng proximity
     // Priority: goa_local > overpass > google (local data first)

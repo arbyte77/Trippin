@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useLoadScript } from "@react-google-maps/api";
 import Navbar from "./Navbar";
 import TripPlannerModal from "./TripPlannerModal";
@@ -11,6 +12,7 @@ import type { ReactNode, FormEvent } from "react";
 const LIBRARIES: ("places")[] = ["places"];
 
 export default function AppShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!;
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -27,10 +29,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     originTime,
     setOriginTime,
     destination,
+    destinationName,
     setDestination,
     destinationTime,
     setDestinationTime,
     waypoints,
+    waypointNames,
     stopTimes,
     addStop,
     removeStop,
@@ -45,6 +49,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     setPendingRecalc,
     pendingShowAmenities,
     setPendingShowAmenities,
+    pendingNavigateHome,
+    setPendingNavigateHome,
     forceShowAmenities,
     setDirections,
     setDirectionsSegments,
@@ -53,6 +59,14 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   // Guard to prevent duplicate recalculation calls
   const isRecalculating = useRef(false);
+
+  // Handle pending navigation to homepage (after directions are calculated from another page)
+  useEffect(() => {
+    if (pendingNavigateHome) {
+      setPendingNavigateHome(false);
+      router.push("/");
+    }
+  }, [pendingNavigateHome, setPendingNavigateHome, router]);
 
   // Handle pending recalculation from any page (when waypoints are added via RefreshmentModal, etc.)
   useEffect(() => {
@@ -122,10 +136,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
         originTime={originTime}
         setOriginTime={setOriginTime}
         destination={destination}
+        destinationName={destinationName}
         setDestination={setDestination}
         destinationTime={destinationTime}
         setDestinationTime={setDestinationTime}
         waypoints={waypoints}
+        waypointNames={waypointNames}
         stopTimes={stopTimes}
         onAddStop={addStop}
         onRemoveStop={removeStop}

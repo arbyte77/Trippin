@@ -19,7 +19,9 @@ export default function MyTripsPage() {
     savedJourneys,
     setOrigin,
     setDestination,
+    setDestinationName,
     setWaypoints,
+    setWaypointNames,
     setStopTimes,
     setTravelMode,
     setFilterOption,
@@ -46,6 +48,20 @@ export default function MyTripsPage() {
             key={trip._id}
             className="mb-4 border p-4 rounded shadow bg-gray-50 space-y-2"
           >
+            {/* Trip ID and Date header */}
+            <div className="flex justify-between items-center text-xs text-gray-500 mb-1">
+              <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">
+                ID: {trip._id.slice(-8)}
+              </span>
+              <span>
+                {new Date(trip.startTime).toLocaleDateString("en-IN", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
             <h3 className="text-xl font-bold text-gray-900">{trip.start} → {trip.destination}</h3>
             <div className="flex flex-wrap gap-2">
               <button
@@ -53,7 +69,9 @@ export default function MyTripsPage() {
                   setEditingJourneyId(trip._id);
                   setOrigin(trip.start);
                   setDestination(trip.destination);
+                  setDestinationName(trip.destinationName || "");
                   setWaypoints(trip.waypoints || []);
+                  setWaypointNames(trip.waypointNames || {});
                   setStopTimes(trip.stopTimes || []);
                   setTravelMode(trip.travelMode);
                   setFilterOption(trip.filterOption);
@@ -79,7 +97,9 @@ export default function MyTripsPage() {
                   setEditingJourneyId(trip._id);
                   setOrigin(trip.start);
                   setDestination(trip.destination);
+                  setDestinationName(trip.destinationName || "");
                   setWaypoints(trip.waypoints || []);
+                  setWaypointNames(trip.waypointNames || {});
                   setStopTimes(trip.stopTimes || []);
                   setTravelMode(trip.travelMode);
                   setFilterOption(trip.filterOption);
@@ -99,7 +119,9 @@ export default function MyTripsPage() {
                   setEditingJourneyId(trip._id);
                   setOrigin(trip.start);
                   setDestination(trip.destination);
+                  setDestinationName(trip.destinationName || "");
                   setWaypoints(trip.waypoints || []);
+                  setWaypointNames(trip.waypointNames || {});
                   setStopTimes(trip.stopTimes || []);
                   setTravelMode(trip.travelMode);
                   setFilterOption(trip.filterOption);

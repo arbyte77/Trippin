@@ -1,7 +1,6 @@
 "use client";
 
 import React, { FormEvent, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useTripContext } from "../context/TripContext";
 import { Autocomplete } from "@react-google-maps/api";
 
@@ -20,6 +19,7 @@ interface TripPlannerModalProps {
   originTime: string;
   setOriginTime: (val: string) => void;
   waypoints: string[];
+  waypointNames: Record<number, string>;
   stopTimes: StopTimes[];
   onAddStop: () => void;
   onRemoveStop: (index: number) => void;
@@ -30,6 +30,7 @@ interface TripPlannerModalProps {
     value: string
   ) => void;
   destination: string;
+  destinationName: string;
   setDestination: (val: string) => void;
   destinationTime: string;
   setDestinationTime: (val: string) => void;
@@ -52,12 +53,14 @@ export default function TripPlannerModal({
   originTime,
   setOriginTime,
   waypoints,
+  waypointNames,
   stopTimes,
   onAddStop,
   onRemoveStop,
   onUpdateStop,
   onUpdateStopTime,
   destination,
+  destinationName,
   setDestination,
   destinationTime,
   setDestinationTime,
@@ -69,8 +72,7 @@ export default function TripPlannerModal({
   isEditing = false,
 }: TripPlannerModalProps) {
   // All hooks must be at the top, before any return
-  const router = useRouter();
-  const { showItinerary, editingJourneyId } = useTripContext();
+  const { editingJourneyId } = useTripContext();
   const originRef = useRef<google.maps.places.Autocomplete | null>(null);
   const destinationRef = useRef<google.maps.places.Autocomplete | null>(null);
   const waypointRefs = useRef<(google.maps.places.Autocomplete | null)[]>([]);
@@ -81,25 +83,23 @@ export default function TripPlannerModal({
   const inEditMode = isEditing || !!editingJourneyId;
 
   useEffect(() => {
-    if (showItinerary) {
-      router.push("/");
-    }
-  }, [showItinerary, router]);
-
-  useEffect(() => {
     if (destinationInputRef.current) {
-      destinationInputRef.current.value = destination;
+      // Prefer friendly name over coordinates
+      destinationInputRef.current.value = destinationName || destination;
     }
-  }, [destination]);
+  }, [destination, destinationName]);
 
   // Sync waypoint input values when waypoints change (e.g., when editing a trip)
+  // Use waypointNames for display if available, otherwise fall back to waypoints
   useEffect(() => {
     waypoints.forEach((wp, idx) => {
       if (waypointInputRefs.current[idx]) {
-        waypointInputRefs.current[idx]!.value = wp;
+        // Prefer friendly name over coordinates - try both numeric and string keys
+        const name = waypointNames[idx] || waypointNames[String(idx)] || wp;
+        waypointInputRefs.current[idx]!.value = name;
       }
     });
-  }, [waypoints]);
+  }, [waypoints, waypointNames]);
 
   if (!showModal) return null;
 
@@ -170,7 +170,7 @@ export default function TripPlannerModal({
                 <input
                   type="text"
                   ref={(el) => (waypointInputRefs.current[idx] = el)}
-                  defaultValue={wp}
+                  defaultValue={waypointNames[idx] || waypointNames[String(idx)] || wp}
                   onChange={(e) => onUpdateStop(idx, e.target.value)}
                   placeholder={`Enter stop ${idx + 1}`}
                   className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"

@@ -35,7 +35,9 @@ export default function ItineraryView({
     segmentsByLeg,
     origin,
     destination,
+    destinationName,
     waypoints,
+    waypointNames,
     editingJourneyId,
     setEditingJourneyId,
     updateTripHandler,
@@ -48,12 +50,28 @@ export default function ItineraryView({
     setPostSaveRedirectToTrips,
     forceShowAmenities,
     isLoadingDirections,
+    tripDate,
   } = useTripContext();
 
+  // Build display names for nodes - use waypointNames/destinationName where available
   const nodes = useMemo(() => {
-    const points = [origin, ...waypoints, destination].filter(Boolean);
+    console.log('[ItineraryView] waypointNames:', JSON.stringify(waypointNames));
+    console.log('[ItineraryView] waypoints:', JSON.stringify(waypoints));
+    console.log('[ItineraryView] destinationName:', destinationName);
+    console.log('[ItineraryView] destination:', destination);
+    
+    const waypointDisplayNames = waypoints.map((wp, idx) => {
+      // Try both numeric and string keys since MongoDB might return either
+      const displayName = waypointNames[idx] || waypointNames[String(idx)] || wp;
+      console.log(`[ItineraryView] waypoint ${idx}: name="${waypointNames[idx] || waypointNames[String(idx)]}" wp="${wp}" => "${displayName}"`);
+      return displayName;
+    });
+    // Use destinationName if available, otherwise use destination value
+    const destDisplay = destinationName || destination;
+    const points = [origin, ...waypointDisplayNames, destDisplay].filter(Boolean);
+    console.log('[ItineraryView] Final nodes:', JSON.stringify(points));
     return points;
-  }, [origin, waypoints, destination]);
+  }, [origin, waypoints, waypointNames, destination, destinationName]);
 
   const noTransitFound = useMemo(() => {
     if (travelMode !== "TRANSIT") return false;
@@ -370,6 +388,31 @@ export default function ItineraryView({
       <h2 className="text-2xl font-bold mb-4 text-gray-900">
         Your Itinerary
       </h2>
+
+      {/* Trip Info Header */}
+      <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
+        <div>
+          {editingJourneyId ? (
+            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+              ID: {editingJourneyId.slice(-8)}
+            </span>
+          ) : (
+            <span className="italic">New Trip</span>
+          )}
+        </div>
+        <div>
+          {tripDate && (
+            <span>
+              {new Date(tripDate).toLocaleDateString("en-IN", {
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Timeline */}
       <div className="relative">

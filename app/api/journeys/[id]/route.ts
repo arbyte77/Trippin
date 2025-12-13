@@ -8,7 +8,7 @@ import { authOptions } from "@/app/api/auth/authOptions";
 // DELETE /api/journeys/:id
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -21,8 +21,7 @@ export async function DELETE(
     return NextResponse.json({ message: "User not found" }, { status: 404 });
   }
 
-
-  const { id } = context.params;
+  const { id } = await context.params;
   const deleted = await Journey.findOneAndDelete({
     _id: id,
     userId: user._id,
@@ -38,7 +37,7 @@ export async function DELETE(
 // PUT /api/journeys/:id
 export async function PUT(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -51,11 +50,13 @@ export async function PUT(
     return NextResponse.json({ message: "User not found" }, { status: 404 });
   }
 
-  const { id } = context.params;
+  const { id } = await context.params;
   const {
     start,
     destination,
+    destinationName,
     waypoints,
+    waypointNames,
     stopTimes,
     travelMode,
     filterOption,
@@ -64,13 +65,18 @@ export async function PUT(
     itinerary,
   } = await request.json();
 
+  // Store waypointNames as JSON string
+  const waypointNamesJson = JSON.stringify(waypointNames || {});
+
   const updated = await Journey.findOneAndUpdate(
     { _id: id, userId: user._id },
     {
       $set: {
         start,
         destination,
+        destinationName: destinationName || "",
         waypoints,
+        waypointNamesJson,
         stopTimes,
         travelMode,
         filterOption,
@@ -80,11 +86,17 @@ export async function PUT(
       },
     },
     { new: true }
-  );
+  ).lean();
 
   if (!updated) {
     return NextResponse.json({ message: "Journey not found" }, { status: 404 });
   }
 
-  return NextResponse.json(updated, { status: 200 });
+  // Parse JSON and add to response
+  const waypointNamesObj = JSON.parse((updated as any).waypointNamesJson || "{}");
+
+  return NextResponse.json({
+    ...updated,
+    waypointNames: waypointNamesObj,
+  }, { status: 200 });
 }

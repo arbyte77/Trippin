@@ -23,6 +23,8 @@ interface TripContextType {
   setRefreshmentInsertIndex: (v: number | null) => void;
   pendingShowAmenities: boolean;
   setPendingShowAmenities: (v: boolean) => void;
+  pendingNavigateHome: boolean;
+  setPendingNavigateHome: (v: boolean) => void;
   isLoadingDirections: boolean;
   isLoadingAmenities: boolean;
   suggestRefreshments: () => Promise<void>;
@@ -34,8 +36,12 @@ interface TripContextType {
   setOrigin: (val: string) => void;
   destination: string;
   setDestination: (val: string) => void;
+  destinationName: string; // Display name for destination (if different from destination value)
+  setDestinationName: (val: string) => void;
   waypoints: string[];
   setWaypoints: (val: string[]) => void;
+  waypointNames: Record<number, string>; // Maps waypoint index to display name
+  setWaypointNames: (val: Record<number, string>) => void;
   originTime: string;
   setOriginTime: (val: string) => void;
   destinationTime: string;
@@ -95,8 +101,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [tripDate, setTripDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [origin, setOrigin] = useState("kk birla goa campus");
   const [destination, setDestination] = useState("");
+  const [destinationName, setDestinationName] = useState("");
   const [editingJourneyId, setEditingJourneyId] = useState<string | null>(null);
   const [waypoints, setWaypoints] = useState<string[]>([]);
+  const [waypointNames, setWaypointNames] = useState<Record<number, string>>({});
   const [originTime, setOriginTime] = useState("");
   const [destinationTime, setDestinationTime] = useState("");
   const [stopTimes, setStopTimes] = useState<StopTimes[]>([]);
@@ -109,6 +117,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [refreshmentNote, setRefreshmentNote] = useState<string | null>(null);
   const [refreshmentInsertIndex, setRefreshmentInsertIndex] = useState<number | null>(null);
   const [pendingShowAmenities, setPendingShowAmenities] = useState(false);
+  const [pendingNavigateHome, setPendingNavigateHome] = useState(false);
   const [postSaveRedirectToTrips, setPostSaveRedirectToTrips] = useState(false);
   const [itinerary, setItinerary] = useState<{ title: string; description: string }[]>([]);
   const [segmentInfos, setSegmentInfos] = useState<any[]>([]);
@@ -127,7 +136,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [isLoadingDirections, setIsLoadingDirections] = useState(false);
   const [isLoadingAmenities, setIsLoadingAmenities] = useState(false);
 
-  // Clear stale state when starting a fresh trip plan
+  // Clear stale directions/routing state when recalculating
+  // Note: Does NOT clear waypointNames/destinationName - those are user-provided display names
   const clearTripState = () => {
     setDirections(null);
     setDirectionsSegments([]);
@@ -138,6 +148,18 @@ export function TripProvider({ children }: { children: ReactNode }) {
     setRefreshmentItems([]);
     setRefreshmentNote(null);
     setRefreshmentInsertIndex(null);
+    // Don't clear waypointNames/destinationName - preserve display names across recalculations
+  };
+  
+  // Full reset for starting a completely new trip
+  const fullReset = () => {
+    clearTripState();
+    setWaypointNames({});
+    setDestinationName("");
+    setWaypoints([]);
+    setStopTimes([]);
+    setDestination("");
+    setEditingJourneyId(null);
   };
 
   const REFRESHMENT_THRESHOLD_SECS = 2 * 60 * 60; // 2 hours
@@ -348,7 +370,13 @@ export function TripProvider({ children }: { children: ReactNode }) {
       
       // Build note showing which stops we searched
       const stopNames = searchPoints.map(p => p.label).join(", ");
-      setRefreshmentItems(prioritized.slice(0, 15));
+      // Show more results (25) to ensure restaurants aren't cut off after toilets
+      const finalItems = prioritized.slice(0, 25);
+      console.log('[forceShowAmenities] Setting refreshmentItems:', finalItems.length);
+      console.log('[forceShowAmenities] Categories:', [...new Set(finalItems.map((p: any) => p.category || p.type))]);
+      console.log('[forceShowAmenities] Sources:', [...new Set(finalItems.map((p: any) => p.source))]);
+      console.log('[forceShowAmenities] Sample item details:', finalItems[0]?.details);
+      setRefreshmentItems(finalItems);
       setRefreshmentNote(`Pit stops within 2km of: ${stopNames}`);
       setIsLoadingAmenities(false);
     } catch (e) {
@@ -375,6 +403,20 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const removeStop = (i: number) => {
     setWaypoints((w) => w.filter((_, idx) => idx !== i));
     setStopTimes((t) => t.filter((_, idx) => idx !== i));
+    // Also update waypointNames: remove the name at index i and shift higher indices down
+    setWaypointNames((prevNames) => {
+      const newNames: Record<number, string> = {};
+      Object.entries(prevNames).forEach(([key, val]) => {
+        const k = parseInt(key, 10);
+        if (k < i) {
+          newNames[k] = val; // Keep as-is
+        } else if (k > i) {
+          newNames[k - 1] = val; // Shift down by 1
+        }
+        // Skip k === i (the removed stop)
+      });
+      return newNames;
+    });
   };
   const updateStop = (i: number, val: string) => {
     setWaypoints((w) => {
@@ -402,7 +444,9 @@ export function TripProvider({ children }: { children: ReactNode }) {
     setEditingJourneyId(j._id?.toString?.() || j._id);
     setOrigin(j.start);
     setDestination(j.destination);
+    setDestinationName(j.destinationName || "");
     setWaypoints(j.waypoints || []);
+    setWaypointNames(j.waypointNames || {});
     setStopTimes(j.stopTimes || []);
     setTravelMode(j.travelMode);
     setFilterOption(j.filterOption);
@@ -424,11 +468,16 @@ export function TripProvider({ children }: { children: ReactNode }) {
       .catch((err) => alert("Error deleting trip."));
   }
   async function saveTripHandler() {
+    console.log('[saveTripHandler] waypointNames:', JSON.stringify(waypointNames));
+    console.log('[saveTripHandler] destinationName:', destinationName);
+    console.log('[saveTripHandler] waypoints:', JSON.stringify(waypoints));
     const journey = {
       userId: "placeholder_user_id",
       start: origin,
       destination,
+      destinationName,
       waypoints,
+      waypointNames,
       stopTimes,
       travelMode,
       filterOption,
@@ -467,7 +516,9 @@ export function TripProvider({ children }: { children: ReactNode }) {
     const payload = {
       start: origin,
       destination,
+      destinationName,
       waypoints,
+      waypointNames,
       stopTimes,
       travelMode,
       filterOption,
@@ -504,13 +555,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
     setExtraMarkersOverride?: any
   ) {
     e.preventDefault();
-    // If launched from the planner modal, this is a fresh plan; ensure we are not in edit mode
-    if (showModal) {
-      try {
-        // clear any stale editing id so subsequent Save performs a POST (new trip)
-        setEditingJourneyId(null);
-      } catch {}
-    }
+    // Only clear editingJourneyId if we're starting a FRESH new trip (no existing edit in progress)
+    // If editingJourneyId is already set, we're editing an existing trip - don't clear it!
+    // This was causing issues where the modal title would switch from "Edit Trip" to "Plan Trip"
+    // and saved edits (like deleted stops) wouldn't persist because update would fail.
+    
     if (!origin || !destination) {
       return alert("Enter both origin and destination.");
     }
@@ -1205,6 +1254,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setIsLoadingDirections(false);
         setShowItinerary(true);
         setTimeout(() => setShowModal(false), 0);
+        // Navigate to homepage if not already there (so itinerary is visible)
+        if (typeof window !== "undefined" && window.location.pathname !== "/") {
+          setPendingNavigateHome(true);
+        }
         
       } catch (err) {
         console.error("[TRANSIT] Error:", err);
@@ -1219,6 +1272,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setIsLoadingDirections(false);
         setShowItinerary(true);
         setTimeout(() => setShowModal(false), 0);
+        // Navigate to homepage if not already there
+        if (typeof window !== "undefined" && window.location.pathname !== "/") {
+          setPendingNavigateHome(true);
+        }
       }
     } else {
       svc.route(
@@ -1278,6 +1335,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
           setShowItinerary(true);
           // Close the modal after showing itinerary
           setTimeout(() => setShowModal(false), 0);
+          // Navigate to homepage if not already there
+          if (typeof window !== "undefined" && window.location.pathname !== "/") {
+            setPendingNavigateHome(true);
+          }
         }
       );
     }
@@ -1298,6 +1359,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setRefreshmentInsertIndex,
         pendingShowAmenities,
         setPendingShowAmenities,
+        pendingNavigateHome,
+        setPendingNavigateHome,
         isLoadingDirections,
         isLoadingAmenities,
         suggestRefreshments: suggestRefreshments,
@@ -1315,8 +1378,12 @@ export function TripProvider({ children }: { children: ReactNode }) {
         setOrigin,
         destination,
         setDestination,
+        destinationName,
+        setDestinationName,
         waypoints,
         setWaypoints,
+        waypointNames,
+        setWaypointNames,
         originTime,
         setOriginTime,
         destinationTime,

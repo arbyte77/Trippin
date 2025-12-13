@@ -13,6 +13,13 @@ export default function Navbar() {
   const {
     setShowModal,
     setShowTrips,
+    setEditingJourneyId,
+    setWaypoints,
+    setStopTimes,
+    setDestination,
+    setDestinationName,
+    setWaypointNames,
+    clearTripState,
   } = useTripContext();
 
   return (
@@ -25,9 +32,19 @@ export default function Navbar() {
         {/* Explore Button navigates to /explore */}
         <button className="bg-purple-500 hover:bg-purple-600 px-3 py-1 rounded" onClick={() => router.push("/explore")}>Explore</button>
 
-        {/* Plan Trip button */}
+        {/* Plan Trip button - starts a fresh new trip */}
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            // Clear any existing edit state to start fresh
+            setEditingJourneyId(null);
+            setWaypoints([]);
+            setStopTimes([]);
+            setDestination("");
+            setDestinationName("");
+            setWaypointNames({});
+            clearTripState();
+            setShowModal(true);
+          }}
           className="bg-turquoise-500 hover:bg-turquoise-600 px-3 py-1 rounded"
         >
           Plan Trip
