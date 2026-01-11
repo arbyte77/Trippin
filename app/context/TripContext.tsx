@@ -281,11 +281,15 @@ export function TripProvider({ children }: { children: ReactNode }) {
             if (leg) {
               const isDestination = legIdx === numLegs - 1;
               const label = isDestination ? destination : stops[legIdx] || `Stop ${legIdx + 1}`;
-              searchPoints.push({
-                lat: leg.end_location.lat(),
-                lng: leg.end_location.lng(),
-                label,
-              });
+              // Use extractLatLng helper to handle both LatLng objects and plain objects
+              const endLoc = extractLatLng(leg.end_location);
+              if (endLoc) {
+                searchPoints.push({
+                  lat: endLoc.lat,
+                  lng: endLoc.lng,
+                  label,
+                });
+              }
             }
           }
         }
@@ -295,11 +299,15 @@ export function TripProvider({ children }: { children: ReactNode }) {
         legs.forEach((leg, idx) => {
           const isDestination = idx === legs.length - 1;
           const label = isDestination ? destination : stops[idx] || `Stop ${idx + 1}`;
-          searchPoints.push({
-            lat: leg.end_location.lat(),
-            lng: leg.end_location.lng(),
-            label,
-          });
+          // Use extractLatLng helper to handle both LatLng objects and plain objects
+          const endLoc = extractLatLng(leg.end_location);
+          if (endLoc) {
+            searchPoints.push({
+              lat: endLoc.lat,
+              lng: endLoc.lng,
+              label,
+            });
+          }
         });
       }
       
