@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash, Eye, MapPin, Zap } from "lucide-react";
+import { Pencil, Trash, Eye, MapPin } from "lucide-react";
 import { useTripContext } from "../../context/TripContext";
 import { useLoadScript } from "@react-google-maps/api";
 
@@ -58,27 +58,16 @@ export default function MyTripsPage() {
       {savedJourneys.length === 0 ? (
         <p className="text-gray-600">No saved trips yet.</p>
       ) : (
-        savedJourneys.map((trip) => {
-          // Check if this trip has cached route data
-          const hasCachedRoute = !!(trip.cachedDirections || trip.cachedDirectionsSegments);
-          
-          return (
+        savedJourneys.map((trip) => (
             <div
               key={trip._id}
               className="mb-4 border p-4 rounded shadow bg-gray-50 space-y-2"
             >
               {/* Trip ID and Date header */}
               <div className="flex justify-between items-center text-xs text-gray-500 mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">
-                    ID: {trip._id.slice(-8)}
-                  </span>
-                  {hasCachedRoute && (
-                    <span className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">
-                      <Zap className="h-3 w-3" /> Cached
-                    </span>
-                  )}
-                </div>
+                <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">
+                  ID: {trip._id.slice(-8)}
+                </span>
                 <span>
                   {new Date(trip.startTime).toLocaleDateString("en-IN", {
                     weekday: "short",
@@ -116,7 +105,7 @@ export default function MyTripsPage() {
                   className="flex items-center border border-gray-300 hover:bg-gray-50 text-gray-800 px-3 py-1 rounded"
                 >
                   <Eye className="h-4 w-4 mr-1" /> 
-                  View Trip {hasCachedRoute && <span className="ml-1 text-green-600 text-xs">(instant)</span>}
+                  View Trip
                 </button>
                 <button
                   onClick={() => handleSeeAmenities(trip._id)}
@@ -126,8 +115,7 @@ export default function MyTripsPage() {
                 </button>
               </div>
             </div>
-          );
-        })
+        ))
       )}
     </div>
   );

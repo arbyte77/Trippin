@@ -459,8 +459,10 @@ export default function ItineraryView({
         </div>
       </div>
 
-      {/* Timeline */}
-      <div className="relative">
+      {/* Two-column layout: Timeline on left, Map on right (stacks on mobile) */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left column - Timeline (50% width on desktop) */}
+        <div className="flex-1 relative">
 
         {/* Starting point */}
         <div className="relative mb-4">
@@ -615,26 +617,30 @@ export default function ItineraryView({
             </div>
         </div>
       ))}
-      </div>
-
-      
-
-      {/* Small clickable map linked to full map view */}
-      <div className="mt-6">
-        <MiniRouteMap
-          start={origin}
-          destination={destination}
-          waypoints={waypoints}
-          travelMode={travelMode}
-          width="100%"
-          height={220}
-          isLoaded={!!isLoaded}
-          loadError={loadError}
-        />
-        <div className="text-xs text-gray-500 mt-1">
-          Click the map to open full map view.
         </div>
+        {/* End of left column */}
+
+        {/* Right column - Map Preview (50% width on desktop, sticky on scroll) */}
+        <div className="flex-1 lg:sticky lg:top-6 lg:self-start">
+          <div className="bg-gray-50 border rounded-lg overflow-hidden shadow-sm">
+            <MiniRouteMap
+              start={origin}
+              destination={destination}
+              waypoints={waypoints}
+              travelMode={travelMode}
+              width="100%"
+              height={400}
+              isLoaded={!!isLoaded}
+              loadError={loadError}
+            />
+            <div className="text-xs text-gray-500 text-center p-2 bg-white border-t">
+              Click the map to open full map view
+            </div>
+          </div>
+        </div>
+        {/* End of right column */}
       </div>
+      {/* End of two-column layout */}
 
       <div className="mt-6 flex justify-end space-x-3">
         <button
