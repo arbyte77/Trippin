@@ -87,12 +87,12 @@ export default function AddToTripPage() {
         setDestinationName(journey.destinationName || "");
         setTravelMode(journey.travelMode);
         setFilterOption(journey.filterOption);
-        setWaypoints(journey.waypoints || []);
+      setWaypoints(journey.waypoints || []);
         // Parse waypointNames - it might come as object or need parsing from JSON
         const wpNames = journey.waypointNames || 
           (journey.waypointNamesJson ? JSON.parse(journey.waypointNamesJson) : {});
         setWaypointNames(wpNames);
-        setStopTimes(journey.stopTimes || []);
+      setStopTimes(journey.stopTimes || []);
         // Set editing journey ID so subsequent saves update this journey
         setEditingJourneyId(journey._id);
       }

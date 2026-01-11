@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
 
 import { useTripContext } from "../context/TripContext";
@@ -69,11 +69,96 @@ const createAmenityMarker = (category: string) => {
 
 export default function MapView({ showItinerary, containerStyle, defaultCenter, icon }: MapViewProps) {
   const { directions, directionsSegments, segmentsByLeg, extraMarkers, travelMode, origin, destination, waypoints } = useTripContext();
+  // Store driving routes for segments with sparse transit geometry (e.g., inter-city buses)
+  const [drivingFallbacks, setDrivingFallbacks] = useState<Map<number, google.maps.LatLngLiteral[]>>(new Map());
+  
+  // For transit segments with sparse geometry (like inter-city buses),
+  // fetch DRIVING directions to get proper road geometry for display
+  useEffect(() => {
+    if (travelMode !== "TRANSIT") return;
+    if (directionsSegments.length === 0) return;
+
+    const getLatLngValue = (loc: any): { lat: number; lng: number } | null => {
+      if (!loc) return null;
+      if (typeof loc.lat === 'function') return { lat: loc.lat(), lng: loc.lng() };
+      if (typeof loc.lat === 'number') return { lat: loc.lat, lng: loc.lng };
+      return null;
+    };
+
+    const sparseSegments: { idx: number; start: google.maps.LatLngLiteral; end: google.maps.LatLngLiteral }[] = [];
+
+    directionsSegments.forEach((seg, idx) => {
+      if (!seg?.routes?.[0]?.legs?.[0]) return;
+      const leg = seg.routes[0].legs[0];
+      const overviewPath = seg.routes[0].overview_path;
+      
+      // Check if geometry is sparse (few points for a segment with transit)
+      const hasTransit = leg.steps?.some((s: any) => s.travel_mode === 'TRANSIT' || s.travel_mode === google.maps.TravelMode.TRANSIT);
+      const pathLength = overviewPath?.length || 0;
+      const distance = leg.distance?.value || 0;
+      
+      // For segments > 5km with transit that have sparse paths, fetch driving route
+      if (hasTransit && distance > 5000 && pathLength < 20) {
+        const startLoc = getLatLngValue(leg.start_location);
+        const endLoc = getLatLngValue(leg.end_location);
+        if (startLoc && endLoc) {
+          sparseSegments.push({ idx, start: startLoc, end: endLoc });
+        }
+      }
+    });
+
+    if (sparseSegments.length === 0) {
+      // Clear any existing fallbacks if no sparse segments
+      if (drivingFallbacks.size > 0) {
+        setDrivingFallbacks(new Map());
+      }
+      return;
+    }
+
+    // Check which segments we don't have fallbacks for yet
+    const missingFallbacks = sparseSegments.filter(({ idx }) => !drivingFallbacks.has(idx));
+    if (missingFallbacks.length === 0) return;
+
+    const svc = new google.maps.DirectionsService();
+
+    missingFallbacks.forEach(({ idx, start: segStart, end: segEnd }) => {
+      svc.route({
+        origin: segStart,
+        destination: segEnd,
+        travelMode: google.maps.TravelMode.DRIVING,
+      }, (res, status) => {
+        if (status === 'OK' && res?.routes?.[0]?.overview_path) {
+          const path = res.routes[0].overview_path.map(p => ({
+            lat: p.lat(),
+            lng: p.lng()
+          }));
+          setDrivingFallbacks(prev => {
+            const updated = new Map(prev);
+            updated.set(idx, path);
+            return updated;
+          });
+        }
+      });
+    });
+  }, [travelMode, directionsSegments, drivingFallbacks.size]);
   
   // Extract positions for custom markers
   // Origin = Blue dot, Stops (waypoints + destination) = A, B, C, ... in order
   const customMarkers = useMemo(() => {
     const markers: { position: google.maps.LatLngLiteral; label: string; icon: string; isTransitStop?: boolean; isOrigin?: boolean }[] = [];
+    
+    // Helper: Extract lat/lng from either LatLng object or plain {lat, lng} object
+    // This handles both fresh API responses and deserialized cached data
+    const getLatLng = (location: any): { lat: number; lng: number } | null => {
+      if (!location) return null;
+      if (typeof location.lat === 'function') {
+        return { lat: location.lat(), lng: location.lng() };
+      }
+      if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+        return { lat: location.lat, lng: location.lng };
+      }
+      return null;
+    };
     
     // Get the list of valid waypoints (non-empty strings)
     const validWaypoints = waypoints.filter(w => w && w.trim());
@@ -103,12 +188,15 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
       const firstSeg = directionsSegments[0];
       const firstLeg = firstSeg?.routes?.[0]?.legs?.[0];
       if (firstLeg) {
-        markers.push({
-          position: { lat: firstLeg.start_location.lat(), lng: firstLeg.start_location.lng() },
-          label: "Origin",
-          icon: ORIGIN_BLUE_DOT,
-          isOrigin: true,
-        });
+        const pos = getLatLng(firstLeg.start_location);
+        if (pos) {
+          markers.push({
+            position: pos,
+            label: "Origin",
+            icon: ORIGIN_BLUE_DOT,
+            isOrigin: true,
+          });
+        }
       }
       
       // Add waypoint markers (A, B, C, ...) using end positions of each leg
@@ -121,12 +209,15 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
           const seg = directionsSegments[segEndIdx];
           const leg = seg?.routes?.[0]?.legs?.[0];
           if (leg) {
-            const letter = String.fromCharCode(65 + wpIdx); // A, B, C, ...
-            markers.push({
-              position: { lat: leg.end_location.lat(), lng: leg.end_location.lng() },
-              label: letter,
-              icon: createLabeledMarker(letter, "#EA4335"),
-            });
+            const pos = getLatLng(leg.end_location);
+            if (pos) {
+              const letter = String.fromCharCode(65 + wpIdx); // A, B, C, ...
+              markers.push({
+                position: pos,
+                label: letter,
+                icon: createLabeledMarker(letter, "#EA4335"),
+              });
+            }
           }
         }
       });
@@ -136,12 +227,15 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
       const lastSeg = directionsSegments[lastSegIdx];
       const lastLeg = lastSeg?.routes?.[0]?.legs?.[0];
       if (lastLeg) {
-        const destLetter = String.fromCharCode(65 + validWaypoints.length); // A if no waypoints, B if 1 waypoint, etc.
-        markers.push({
-          position: { lat: lastLeg.end_location.lat(), lng: lastLeg.end_location.lng() },
-          label: destLetter,
-          icon: createLabeledMarker(destLetter, "#EA4335"),
-        });
+        const pos = getLatLng(lastLeg.end_location);
+        if (pos) {
+          const destLetter = String.fromCharCode(65 + validWaypoints.length); // A if no waypoints, B if 1 waypoint, etc.
+          markers.push({
+            position: pos,
+            label: destLetter,
+            icon: createLabeledMarker(destLetter, "#EA4335"),
+          });
+        }
       }
       
       // Extract transit board/alight stops from all segments
@@ -153,22 +247,22 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
           if (step.travel_mode === "TRANSIT" || step.travel_mode === google.maps.TravelMode.TRANSIT) {
             const tr = step.transit;
             if (tr?.departure_stop?.location) {
-              transitStops.push({
-                position: { 
-                  lat: tr.departure_stop.location.lat(), 
-                  lng: tr.departure_stop.location.lng() 
-                },
-                name: tr.departure_stop.name || "Bus Stop",
-              });
+              const pos = getLatLng(tr.departure_stop.location);
+              if (pos) {
+                transitStops.push({
+                  position: pos,
+                  name: tr.departure_stop.name || "Bus Stop",
+                });
+              }
             }
             if (tr?.arrival_stop?.location) {
-              transitStops.push({
-                position: { 
-                  lat: tr.arrival_stop.location.lat(), 
-                  lng: tr.arrival_stop.location.lng() 
-                },
-                name: tr.arrival_stop.name || "Bus Stop",
-              });
+              const pos = getLatLng(tr.arrival_stop.location);
+              if (pos) {
+                transitStops.push({
+                  position: pos,
+                  name: tr.arrival_stop.name || "Bus Stop",
+                });
+              }
             }
           }
         });
@@ -204,22 +298,28 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
       legs.forEach((leg, idx) => {
         // Add origin marker (blue dot) for first leg only
         if (idx === 0) {
-          markers.push({
-            position: { lat: leg.start_location.lat(), lng: leg.start_location.lng() },
-            label: "Origin",
-            icon: ORIGIN_BLUE_DOT,
-            isOrigin: true,
-          });
+          const startPos = getLatLng(leg.start_location);
+          if (startPos) {
+            markers.push({
+              position: startPos,
+              label: "Origin",
+              icon: ORIGIN_BLUE_DOT,
+              isOrigin: true,
+            });
+          }
         }
         // Add end marker for each leg (waypoint or destination)
         // Labels: A for first stop, B for second, etc.
-        const letter = String.fromCharCode(65 + stopIndex);
-        markers.push({
-          position: { lat: leg.end_location.lat(), lng: leg.end_location.lng() },
-          label: letter,
-          icon: createLabeledMarker(letter, "#EA4335"),
-        });
-        stopIndex++;
+        const endPos = getLatLng(leg.end_location);
+        if (endPos) {
+          const letter = String.fromCharCode(65 + stopIndex);
+          markers.push({
+            position: endPos,
+            label: letter,
+            icon: createLabeledMarker(letter, "#EA4335"),
+          });
+          stopIndex++;
+        }
       });
     }
     
@@ -231,6 +331,18 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
     if (travelMode !== "TRANSIT" || directionsSegments.length === 0) {
       return [];
     }
+    
+    // Helper: Extract lat/lng from either LatLng object or plain {lat, lng} object
+    const getLatLng = (location: any): { lat: number; lng: number } | null => {
+      if (!location) return null;
+      if (typeof location.lat === 'function') {
+        return { lat: location.lat(), lng: location.lng() };
+      }
+      if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+        return { lat: location.lat, lng: location.lng };
+      }
+      return null;
+    };
     
     return directionsSegments.map((seg) => {
       const leg = seg.routes?.[0]?.legs?.[0];
@@ -248,32 +360,25 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
         const path: google.maps.LatLngLiteral[] = [];
         (leg.steps || []).forEach((step: any) => {
           if (step.path) {
-            step.path.forEach((point: google.maps.LatLng) => {
-              path.push({ lat: point.lat(), lng: point.lng() });
+            step.path.forEach((point: any) => {
+              const pos = getLatLng(point);
+              if (pos) path.push(pos);
             });
           } else if (step.start_location && step.end_location) {
             // Fallback: use start and end locations
-            path.push({ 
-              lat: step.start_location.lat(), 
-              lng: step.start_location.lng() 
-            });
-            path.push({ 
-              lat: step.end_location.lat(), 
-              lng: step.end_location.lng() 
-            });
+            const startPos = getLatLng(step.start_location);
+            const endPos = getLatLng(step.end_location);
+            if (startPos) path.push(startPos);
+            if (endPos) path.push(endPos);
           }
         });
         
         // If path is empty, use leg start/end
         if (path.length === 0 && leg.start_location && leg.end_location) {
-          path.push({ 
-            lat: leg.start_location.lat(), 
-            lng: leg.start_location.lng() 
-          });
-          path.push({ 
-            lat: leg.end_location.lat(), 
-            lng: leg.end_location.lng() 
-          });
+          const startPos = getLatLng(leg.start_location);
+          const endPos = getLatLng(leg.end_location);
+          if (startPos) path.push(startPos);
+          if (endPos) path.push(endPos);
         }
         
         return { isWalkingOnly: true, path };
@@ -312,6 +417,11 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
         {/* Render route lines - transit segments use DirectionsRenderer, walking uses dotted Polyline */}
         {travelMode === "TRANSIT" && directionsSegments.length > 0
           ? directionsSegments.map((seg, idx) => {
+              // Skip invalid segments that don't have routes array
+              if (!seg || !seg.routes || !Array.isArray(seg.routes) || seg.routes.length === 0) {
+                return null;
+              }
+              
               const analysis = segmentAnalysis[idx];
               
               // Walking-only segment: render as dotted polyline
@@ -325,16 +435,33 @@ export default function MapView({ showItinerary, containerStyle, defaultCenter, 
                 );
               }
               
+              // Check if we have a driving fallback for this segment (sparse geometry)
+              const fallbackPath = drivingFallbacks.get(idx);
+              if (fallbackPath && fallbackPath.length > 0) {
+                // Use a Polyline with driving route for better visualization
+                return (
+                  <Polyline
+                    key={`fallback-${idx}`}
+                    path={fallbackPath}
+                    options={{
+                      strokeColor: "#4285F4", // Google Maps blue
+                      strokeOpacity: 0.8,
+                      strokeWeight: 5,
+                    }}
+                  />
+                );
+              }
+              
               // Transit segment: use DirectionsRenderer
               return (
-                <DirectionsRenderer
-                  key={idx}
-                  directions={seg}
-                  options={{ suppressMarkers: true, preserveViewport: false }}
-                />
+              <DirectionsRenderer
+                key={idx}
+                directions={seg}
+                options={{ suppressMarkers: true, preserveViewport: false }}
+              />
               );
             })
-          : directions && (
+          : directions && directions.routes && Array.isArray(directions.routes) && (
               <DirectionsRenderer
                 directions={directions}
                 options={{ suppressMarkers: true, preserveViewport: false }}

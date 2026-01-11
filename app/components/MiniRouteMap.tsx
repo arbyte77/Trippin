@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GoogleMap, DirectionsRenderer, Marker } from "@react-google-maps/api";
+import { GoogleMap, DirectionsRenderer, Marker, Polyline } from "@react-google-maps/api";
 import { useTripContext } from "../context/TripContext";
 
 interface MiniRouteMapProps {
@@ -38,6 +38,8 @@ export default function MiniRouteMap({
   const router = useRouter();
   const { directionsSegments, segmentsByLeg } = useTripContext();
   const [localDirections, setLocalDirections] = useState<google.maps.DirectionsResult | null>(null);
+  // Store driving routes for segments with sparse transit geometry
+  const [drivingFallbacks, setDrivingFallbacks] = useState<Map<number, google.maps.LatLngLiteral[]>>(new Map());
 
   const containerStyle = useMemo(
     () => ({
@@ -70,6 +72,76 @@ export default function MiniRouteMap({
     });
   }, [isLoaded, start, destination, waypoints, travelMode]);
 
+  // For transit segments with sparse geometry (like inter-city buses),
+  // fetch DRIVING directions to get proper road geometry for display
+  useEffect(() => {
+    if (!isLoaded || travelMode !== google.maps.TravelMode.TRANSIT) return;
+    if (directionsSegments.length === 0) return;
+
+    const getLatLngValue = (loc: any): { lat: number; lng: number } | null => {
+      if (!loc) return null;
+      if (typeof loc.lat === 'function') return { lat: loc.lat(), lng: loc.lng() };
+      if (typeof loc.lat === 'number') return { lat: loc.lat, lng: loc.lng };
+      return null;
+    };
+
+    const sparseSegments: { idx: number; start: google.maps.LatLngLiteral; end: google.maps.LatLngLiteral }[] = [];
+
+    directionsSegments.forEach((seg, idx) => {
+      if (!seg?.routes?.[0]?.legs?.[0]) return;
+      const leg = seg.routes[0].legs[0];
+      const overviewPath = seg.routes[0].overview_path;
+      
+      // Check if geometry is sparse (less than 20 points for a segment with transit)
+      const hasTransit = leg.steps?.some((s: any) => s.travel_mode === 'TRANSIT');
+      const pathLength = overviewPath?.length || 0;
+      const distance = leg.distance?.value || 0;
+      
+      // For segments > 5km with transit that have sparse paths, fetch driving route
+      if (hasTransit && distance > 5000 && pathLength < 20) {
+        const startLoc = getLatLngValue(leg.start_location);
+        const endLoc = getLatLngValue(leg.end_location);
+        if (startLoc && endLoc) {
+          sparseSegments.push({ idx, start: startLoc, end: endLoc });
+        }
+      }
+    });
+
+    if (sparseSegments.length === 0) {
+      // Clear any existing fallbacks if no sparse segments
+      if (drivingFallbacks.size > 0) {
+        setDrivingFallbacks(new Map());
+      }
+      return;
+    }
+
+    // Check which segments we don't have fallbacks for yet
+    const missingFallbacks = sparseSegments.filter(({ idx }) => !drivingFallbacks.has(idx));
+    if (missingFallbacks.length === 0) return;
+
+    const svc = new google.maps.DirectionsService();
+
+    missingFallbacks.forEach(({ idx, start: segStart, end: segEnd }) => {
+      svc.route({
+        origin: segStart,
+        destination: segEnd,
+        travelMode: google.maps.TravelMode.DRIVING,
+      }, (res, status) => {
+        if (status === 'OK' && res?.routes?.[0]?.overview_path) {
+          const path = res.routes[0].overview_path.map(p => ({
+            lat: p.lat(),
+            lng: p.lng()
+          }));
+          setDrivingFallbacks(prev => {
+            const updated = new Map(prev);
+            updated.set(idx, path);
+            return updated;
+          });
+        }
+      });
+    });
+  }, [isLoaded, travelMode, directionsSegments, drivingFallbacks.size]);
+
   // Decide which directions to use
   const directions = travelMode === google.maps.TravelMode.TRANSIT 
     ? (directionsSegments.length > 0 ? directionsSegments : null)
@@ -78,6 +150,21 @@ export default function MiniRouteMap({
   // Extract custom markers
   const customMarkers = useMemo(() => {
     const markers: { position: google.maps.LatLngLiteral; label: string; icon: string; isTransitStop?: boolean }[] = [];
+    
+    // Helper: Extract lat/lng from either LatLng object or plain {lat, lng} object
+    // This handles both fresh API responses and deserialized cached data
+    const getLatLng = (location: any): { lat: number; lng: number } | null => {
+      if (!location) return null;
+      // Check if it's a LatLng object with methods
+      if (typeof location.lat === 'function') {
+        return { lat: location.lat(), lng: location.lng() };
+      }
+      // Check if it's a plain object with lat/lng numbers
+      if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+        return { lat: location.lat, lng: location.lng };
+      }
+      return null;
+    };
     
     if (travelMode === google.maps.TravelMode.TRANSIT && directionsSegments.length > 0) {
       const transitStops: { position: google.maps.LatLngLiteral; name: string }[] = [];
@@ -103,11 +190,14 @@ export default function MiniRouteMap({
       const firstSeg = directionsSegments[0];
       const firstLeg = firstSeg?.routes?.[0]?.legs?.[0];
       if (firstLeg) {
-        markers.push({
-          position: { lat: firstLeg.start_location.lat(), lng: firstLeg.start_location.lng() },
-          label: "A",
-          icon: createLabeledMarker("A", "FF4444"),
-        });
+        const pos = getLatLng(firstLeg.start_location);
+        if (pos) {
+          markers.push({
+            position: pos,
+            label: "A",
+            icon: createLabeledMarker("A", "FF4444"),
+          });
+        }
       }
       
       // Add waypoint markers (B, C, D, ...)
@@ -119,12 +209,15 @@ export default function MiniRouteMap({
           const seg = directionsSegments[segEndIdx];
           const leg = seg?.routes?.[0]?.legs?.[0];
           if (leg) {
-            const letter = String.fromCharCode(66 + wpIdx); // B, C, D, ...
-            markers.push({
-              position: { lat: leg.end_location.lat(), lng: leg.end_location.lng() },
-              label: letter,
-              icon: createLabeledMarker(letter, "FF4444"),
-            });
+            const pos = getLatLng(leg.end_location);
+            if (pos) {
+              const letter = String.fromCharCode(66 + wpIdx); // B, C, D, ...
+              markers.push({
+                position: pos,
+                label: letter,
+                icon: createLabeledMarker(letter, "FF4444"),
+              });
+            }
           }
         }
       });
@@ -133,12 +226,15 @@ export default function MiniRouteMap({
       const lastSeg = directionsSegments[directionsSegments.length - 1];
       const lastLeg = lastSeg?.routes?.[0]?.legs?.[0];
       if (lastLeg) {
-        const destLetter = String.fromCharCode(66 + filteredWaypoints.length);
-        markers.push({
-          position: { lat: lastLeg.end_location.lat(), lng: lastLeg.end_location.lng() },
-          label: destLetter,
-          icon: createLabeledMarker(destLetter, "FF4444"),
-        });
+        const pos = getLatLng(lastLeg.end_location);
+        if (pos) {
+          const destLetter = String.fromCharCode(66 + filteredWaypoints.length);
+          markers.push({
+            position: pos,
+            label: destLetter,
+            icon: createLabeledMarker(destLetter, "FF4444"),
+          });
+        }
       }
       
       // Extract transit stops from all segments
@@ -150,22 +246,22 @@ export default function MiniRouteMap({
           if (step.travel_mode === "TRANSIT" || step.travel_mode === google.maps.TravelMode.TRANSIT) {
             const tr = step.transit;
             if (tr?.departure_stop?.location) {
-              transitStops.push({
-                position: { 
-                  lat: tr.departure_stop.location.lat(), 
-                  lng: tr.departure_stop.location.lng() 
-                },
-                name: tr.departure_stop.name || "Bus Stop",
-              });
+              const pos = getLatLng(tr.departure_stop.location);
+              if (pos) {
+                transitStops.push({
+                  position: pos,
+                  name: tr.departure_stop.name || "Bus Stop",
+                });
+              }
             }
             if (tr?.arrival_stop?.location) {
-              transitStops.push({
-                position: { 
-                  lat: tr.arrival_stop.location.lat(), 
-                  lng: tr.arrival_stop.location.lng() 
-                },
-                name: tr.arrival_stop.name || "Bus Stop",
-              });
+              const pos = getLatLng(tr.arrival_stop.location);
+              if (pos) {
+                transitStops.push({
+                  position: pos,
+                  name: tr.arrival_stop.name || "Bus Stop",
+                });
+              }
             }
           }
         });
@@ -198,17 +294,23 @@ export default function MiniRouteMap({
       
       legs.forEach((leg, idx) => {
         if (idx === 0) {
+          const startPos = getLatLng(leg.start_location);
+          if (startPos) {
+            markers.push({
+              position: startPos,
+              label: String.fromCharCode(65 + letterIndex),
+              icon: createLabeledMarker(String.fromCharCode(65 + letterIndex++), "FF4444"),
+            });
+          }
+        }
+        const endPos = getLatLng(leg.end_location);
+        if (endPos) {
           markers.push({
-            position: { lat: leg.start_location.lat(), lng: leg.start_location.lng() },
+            position: endPos,
             label: String.fromCharCode(65 + letterIndex),
             icon: createLabeledMarker(String.fromCharCode(65 + letterIndex++), "FF4444"),
           });
         }
-        markers.push({
-          position: { lat: leg.end_location.lat(), lng: leg.end_location.lng() },
-          label: String.fromCharCode(65 + letterIndex),
-          icon: createLabeledMarker(String.fromCharCode(65 + letterIndex++), "FF4444"),
-        });
       });
     }
     
@@ -239,14 +341,35 @@ export default function MiniRouteMap({
       <GoogleMap mapContainerStyle={{ width: "100%", height: "100%" }} center={defaultCenter} zoom={11}>
         {/* Render route lines */}
         {travelMode === google.maps.TravelMode.TRANSIT && directionsSegments.length > 0
-          ? directionsSegments.map((seg, idx) => (
-              <DirectionsRenderer
-                key={idx}
-                directions={seg}
-                options={{ suppressMarkers: true, preserveViewport: false }}
-              />
-            ))
-          : localDirections && (
+          ? directionsSegments
+              .filter(seg => seg && seg.routes && Array.isArray(seg.routes) && seg.routes.length > 0)
+              .map((seg, idx) => {
+                // Check if we have a driving fallback for this segment (sparse geometry)
+                const fallbackPath = drivingFallbacks.get(idx);
+                if (fallbackPath && fallbackPath.length > 0) {
+                  // Use a Polyline with driving route for better visualization
+                  return (
+                    <Polyline
+                      key={`fallback-${idx}`}
+                      path={fallbackPath}
+                      options={{
+                        strokeColor: "#4285F4", // Google Maps blue
+                        strokeOpacity: 0.8,
+                        strokeWeight: 4,
+                      }}
+                    />
+                  );
+                }
+                // Use DirectionsRenderer for segments with good geometry
+                return (
+                  <DirectionsRenderer
+                    key={idx}
+                    directions={seg}
+                    options={{ suppressMarkers: true, preserveViewport: false }}
+                  />
+                );
+              })
+          : localDirections && localDirections.routes && Array.isArray(localDirections.routes) && (
               <DirectionsRenderer
                 directions={localDirections}
                 options={{ suppressMarkers: true, preserveViewport: false }}

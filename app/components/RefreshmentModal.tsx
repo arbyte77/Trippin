@@ -211,7 +211,7 @@ export default function RefreshmentModal() {
         const k = parseInt(key, 10);
         if (k >= insertIdx) {
           newNames[k + 1] = val;
-        } else {
+      } else {
           newNames[k] = val;
         }
       });
@@ -417,7 +417,7 @@ export default function RefreshmentModal() {
                     : "Sorted by distance"}
                 </span>
               </div>
-              <ul className="space-y-3">
+            <ul className="space-y-3">
               {filteredItems.map((p: any, i: number) => {
                 const isLocal = p.source === "goa_local" || p.external_place_id?.startsWith("goa:");
                 const isExpanded = expandedItems.has(i);
@@ -488,13 +488,13 @@ export default function RefreshmentModal() {
                 return (
                   <li key={i} className="border rounded-lg overflow-hidden">
                     <div className="flex items-center p-3">
-                      {p.imageUrl ? (
-                        <img src={p.imageUrl} alt={p.name} className="w-16 h-16 object-cover rounded mr-3" />
-                      ) : (
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.name} className="w-16 h-16 object-cover rounded mr-3" />
+                  ) : (
                         <div className="w-16 h-16 bg-gray-100 rounded mr-3 flex items-center justify-center">
                           {getCategoryIcon()}
                         </div>
-                      )}
+                  )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-gray-900 truncate">{p.name}</span>
@@ -519,27 +519,27 @@ export default function RefreshmentModal() {
                         </div>
                         <div className="text-xs text-gray-600 truncate">
                           {p.location?.landmark || p.location?.address || p.location?.area}
-                        </div>
+                    </div>
                         {p.distance && (
                           <div className="text-xs text-gray-500">{Math.round(p.distance)}m away</div>
                         )}
-                      </div>
+                  </div>
                       <div className="flex items-center space-x-2 ml-2">
                         {/* Show Details button for all amenities */}
                         <button
                           onClick={() => toggleExpand(i)}
                           className="text-sm text-blue-600 hover:underline flex items-center"
-                        >
-                          Details
+                      >
+                        Details
                           {isExpanded ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
                         </button>
-                        <button
-                          onClick={() => onAdd(p)}
+                    <button
+                      onClick={() => onAdd(p)}
                           className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                        >
-                          Add
-                        </button>
-                      </div>
+                    >
+                      Add
+                    </button>
+                  </div>
                     </div>
                     
                     {/* Expanded amenity details - works for all sources */}
@@ -685,10 +685,10 @@ export default function RefreshmentModal() {
                         )}
                       </div>
                     )}
-                  </li>
+                </li>
                 );
               })}
-              </ul>
+            </ul>
             </>
           ) : refreshmentItems.length > 0 ? (
             <div className="text-sm text-gray-700 py-8 text-center">

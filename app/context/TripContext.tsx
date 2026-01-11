@@ -13,6 +13,8 @@ interface TripContextType {
   setEditingJourneyId: (val: string | null) => void;
   postSaveRedirectToTrips: boolean;
   setPostSaveRedirectToTrips: (v: boolean) => void;
+  showNoChangesPrompt: boolean;
+  setShowNoChangesPrompt: (v: boolean) => void;
   showRefreshmentModal: boolean;
   setShowRefreshmentModal: (v: boolean) => void;
   refreshmentItems: any[];
@@ -86,6 +88,7 @@ interface TripContextType {
   saveTripHandler: () => Promise<any>;
   updateTripHandler: () => Promise<void>;
   getDirectionsHandler: (e: FormEvent, maps: typeof google.maps, setDirections?: any, setDirectionsSegments?: any, setExtraMarkers?: any) => Promise<void>;
+  loadJourneyById: (journeyId: string) => boolean;
 }
 
 const TripContext = createContext<TripContextType | undefined>(undefined);
@@ -119,6 +122,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
   const [pendingShowAmenities, setPendingShowAmenities] = useState(false);
   const [pendingNavigateHome, setPendingNavigateHome] = useState(false);
   const [postSaveRedirectToTrips, setPostSaveRedirectToTrips] = useState(false);
+  const [showNoChangesPrompt, setShowNoChangesPrompt] = useState(false);
   const [itinerary, setItinerary] = useState<{ title: string; description: string }[]>([]);
   const [segmentInfos, setSegmentInfos] = useState<any[]>([]);
   const [segmentsByLeg, setSegmentsByLeg] = useState<number[]>([]);
@@ -588,12 +592,33 @@ export function TripProvider({ children }: { children: ReactNode }) {
   function viewSavedTripHandler() {
     if (!savedJourneys.length) return alert("No saved trips.");
     const latest = savedJourneys[savedJourneys.length - 1];
-    setItinerary([{ title: "Your Itinerary", description: latest.itinerary }]);
+    // Use cache-aware loading
+    loadJourneyWithCache(latest);
     setShowItinerary(true);
+  }
+  
+  // Load a specific journey by ID (used from Trips page, etc.)
+  function loadJourneyById(journeyId: string) {
+    const journey = savedJourneys.find((j: any) => (j._id?.toString?.() || j._id) === journeyId);
+    if (!journey) {
+      console.warn('[loadJourneyById] Journey not found:', journeyId);
+      return false;
+    }
+    loadJourneyWithCache(journey);
+    return true;
   }
   function editSavedTripHandler() {
     if (!savedJourneys.length) return alert("No saved trips.");
     const j = savedJourneys[savedJourneys.length - 1];
+    loadJourneyWithCache(j);
+    setShowModal(true);
+  }
+  
+  // Load a journey and restore cached directions if available
+  function loadJourneyWithCache(j: any) {
+    console.log('[loadJourneyWithCache] Loading journey:', j._id, 'has cache:', !!j.cachedDirections || !!j.cachedDirectionsSegments);
+    
+    // Set basic journey data
     setEditingJourneyId(j._id?.toString?.() || j._id);
     setOrigin(j.start);
     setDestination(j.destination);
@@ -606,8 +631,71 @@ export function TripProvider({ children }: { children: ReactNode }) {
     setTripDate(new Date(j.startTime).toISOString().split("T")[0]);
     setOriginTime(new Date(j.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }));
     setDestinationTime(new Date(j.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }));
-    setItinerary([{ title: "Your Itinerary", description: j.itinerary }]);
-    setShowModal(true);
+    
+    // Try to restore cached directions
+    let cacheRestored = false;
+    
+    // For transit mode, restore segments
+    if (j.cachedDirectionsSegments && j.travelMode === "TRANSIT") {
+      try {
+        const segments = JSON.parse(j.cachedDirectionsSegments);
+        if (Array.isArray(segments) && segments.length > 0) {
+          // Deserialize each segment
+          const restoredSegments = segments.map((seg: string) => {
+            const cached = typeof seg === 'string' ? seg : JSON.stringify(seg);
+            return deserializeDirectionsResult(cached);
+          }).filter((s: google.maps.DirectionsResult | null): s is google.maps.DirectionsResult => s !== null);
+          
+          if (restoredSegments.length > 0) {
+            console.log('[loadJourneyWithCache] Restored', restoredSegments.length, 'transit segments from cache');
+            setDirectionsSegments(restoredSegments);
+            setDirections(null);
+            cacheRestored = true;
+          }
+        }
+      } catch (e) {
+        console.error('[loadJourneyWithCache] Error restoring transit segments:', e);
+      }
+    }
+    
+    // For driving/walking, restore single directions result
+    if (j.cachedDirections && j.travelMode !== "TRANSIT" && !cacheRestored) {
+      const restored = deserializeDirectionsResult(j.cachedDirections);
+      if (restored) {
+        console.log('[loadJourneyWithCache] Restored driving directions from cache');
+        setDirections(restored);
+        setDirectionsSegments([]);
+        cacheRestored = true;
+      }
+    }
+    
+    // Restore segments by leg
+    if (j.cachedSegmentsByLeg && j.cachedSegmentsByLeg.length > 0) {
+      setSegmentsByLeg(j.cachedSegmentsByLeg);
+    }
+    
+    // Restore itinerary
+    if (j.cachedItinerary) {
+      try {
+        const parsedItinerary = JSON.parse(j.cachedItinerary);
+        if (Array.isArray(parsedItinerary) && parsedItinerary.length > 0) {
+          console.log('[loadJourneyWithCache] Restored itinerary from cache:', parsedItinerary.length, 'items');
+          setItinerary(parsedItinerary);
+        } else {
+          setItinerary([{ title: "Your Itinerary", description: j.itinerary || "" }]);
+        }
+      } catch {
+        setItinerary([{ title: "Your Itinerary", description: j.itinerary || "" }]);
+      }
+    } else {
+      setItinerary([{ title: "Your Itinerary", description: j.itinerary || "" }]);
+    }
+    
+    // Show itinerary if cache was restored
+    if (cacheRestored) {
+      setShowItinerary(true);
+      console.log('[loadJourneyWithCache] ✅ Route loaded from cache - no API calls needed!');
+    }
   }
   function deleteTripHandler(id: string) {
     fetch(`/api/journeys/${id}`, {
@@ -620,10 +708,171 @@ export function TripProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => alert("Error deleting trip."));
   }
+  // Helper: Extract lat/lng from either LatLng object or plain {lat, lng} object
+  const extractLatLng = (location: any): { lat: number; lng: number } | null => {
+    if (!location) return null;
+    // Check if it's a LatLng object with methods
+    if (typeof location.lat === 'function') {
+      return { lat: location.lat(), lng: location.lng() };
+    }
+    // Otherwise treat as plain object
+    if (typeof location.lat === 'number' && typeof location.lng === 'number') {
+      return { lat: location.lat, lng: location.lng };
+    }
+    return null;
+  };
+
+  // Helper: Serialize DirectionsResult for caching
+  // We extract only the essential data needed to reconstruct the route display
+  // Handles both fresh Google API results (LatLng objects) and deserialized cached data (plain objects)
+  const serializeDirectionsResult = (result: google.maps.DirectionsResult | null): string | null => {
+    if (!result) return null;
+    try {
+      // Extract the essential route data (routes, legs, steps, geometry)
+      const serializable = {
+        routes: result.routes.map(route => ({
+          bounds: route.bounds ? {
+            north: typeof route.bounds.getNorthEast === 'function' 
+              ? route.bounds.getNorthEast().lat() 
+              : (route.bounds as any).north,
+            east: typeof route.bounds.getNorthEast === 'function'
+              ? route.bounds.getNorthEast().lng()
+              : (route.bounds as any).east,
+            south: typeof route.bounds.getSouthWest === 'function'
+              ? route.bounds.getSouthWest().lat()
+              : (route.bounds as any).south,
+            west: typeof route.bounds.getSouthWest === 'function'
+              ? route.bounds.getSouthWest().lng()
+              : (route.bounds as any).west,
+          } : null,
+          overview_polyline: route.overview_polyline,
+          overview_path: route.overview_path?.map(p => extractLatLng(p)).filter(Boolean),
+          legs: route.legs.map(leg => ({
+            distance: leg.distance,
+            duration: leg.duration,
+            start_address: leg.start_address,
+            end_address: leg.end_address,
+            start_location: extractLatLng(leg.start_location),
+            end_location: extractLatLng(leg.end_location),
+            departure_time: leg.departure_time,
+            arrival_time: leg.arrival_time,
+            steps: leg.steps.map(step => ({
+              distance: step.distance,
+              duration: step.duration,
+              instructions: step.instructions,
+              travel_mode: step.travel_mode,
+              start_location: extractLatLng(step.start_location),
+              end_location: extractLatLng(step.end_location),
+              path: step.path?.map(p => extractLatLng(p)).filter(Boolean),
+              transit: step.transit ? {
+                arrival_stop: step.transit.arrival_stop ? {
+                  name: step.transit.arrival_stop.name,
+                  location: extractLatLng(step.transit.arrival_stop.location),
+                } : null,
+                departure_stop: step.transit.departure_stop ? {
+                  name: step.transit.departure_stop.name,
+                  location: extractLatLng(step.transit.departure_stop.location),
+                } : null,
+                arrival_time: step.transit.arrival_time,
+                departure_time: step.transit.departure_time,
+                headsign: step.transit.headsign,
+                line: step.transit.line ? {
+                  name: step.transit.line.name,
+                  short_name: step.transit.line.short_name,
+                  vehicle: step.transit.line.vehicle,
+                } : null,
+                num_stops: step.transit.num_stops,
+              } : null,
+            })),
+          })),
+        })),
+        request: {
+          origin: result.request?.origin,
+          destination: result.request?.destination,
+          travelMode: result.request?.travelMode,
+        },
+      };
+      return JSON.stringify(serializable);
+    } catch (e) {
+      console.error('[serializeDirectionsResult] Error:', e);
+      return null;
+    }
+  };
+
+  // Helper: Deserialize cached directions back to a usable format
+  // Note: This returns a plain object, not a full google.maps.DirectionsResult
+  // The DirectionsRenderer can handle this for display
+  const deserializeDirectionsResult = (cached: string | null): google.maps.DirectionsResult | null => {
+    if (!cached) return null;
+    try {
+      const parsed = JSON.parse(cached);
+      
+      // Validate that routes is an array with at least one route
+      if (!parsed.routes || !Array.isArray(parsed.routes) || parsed.routes.length === 0) {
+        console.warn('[deserializeDirectionsResult] Invalid cached data - routes is not a valid array');
+        return null;
+      }
+      
+      // Validate first route has legs
+      if (!parsed.routes[0]?.legs || !Array.isArray(parsed.routes[0].legs)) {
+        console.warn('[deserializeDirectionsResult] Invalid cached data - no legs in route');
+        return null;
+      }
+      
+      // Reconstruct LatLng objects and bounds
+      if (typeof google !== 'undefined') {
+        parsed.routes = parsed.routes.map((route: any) => ({
+          ...route,
+          bounds: route.bounds ? new google.maps.LatLngBounds(
+            new google.maps.LatLng(route.bounds.south, route.bounds.west),
+            new google.maps.LatLng(route.bounds.north, route.bounds.east)
+          ) : null,
+          overview_path: route.overview_path?.map((p: any) => new google.maps.LatLng(p.lat, p.lng)),
+          legs: route.legs.map((leg: any) => ({
+            ...leg,
+            start_location: leg.start_location ? new google.maps.LatLng(leg.start_location.lat, leg.start_location.lng) : null,
+            end_location: leg.end_location ? new google.maps.LatLng(leg.end_location.lat, leg.end_location.lng) : null,
+            steps: (leg.steps || []).map((step: any) => ({
+              ...step,
+              start_location: step.start_location ? new google.maps.LatLng(step.start_location.lat, step.start_location.lng) : null,
+              end_location: step.end_location ? new google.maps.LatLng(step.end_location.lat, step.end_location.lng) : null,
+              path: step.path?.map((p: any) => new google.maps.LatLng(p.lat, p.lng)),
+            })),
+          })),
+        }));
+      }
+      return parsed as google.maps.DirectionsResult;
+    } catch (e) {
+      console.error('[deserializeDirectionsResult] Error:', e);
+      return null;
+    }
+  };
+
   async function saveTripHandler() {
     console.log('[saveTripHandler] waypointNames:', JSON.stringify(waypointNames));
     console.log('[saveTripHandler] destinationName:', destinationName);
     console.log('[saveTripHandler] waypoints:', JSON.stringify(waypoints));
+    
+    // Serialize current directions for caching
+    const cachedDirections = serializeDirectionsResult(directions);
+    
+    // For segments, only include successfully serialized ones (skip null results)
+    let cachedDirectionsSegments: string | null = null;
+    if (directionsSegments.length > 0) {
+      const serializedSegments = directionsSegments
+        .map(seg => serializeDirectionsResult(seg))
+        .filter((s): s is string => s !== null);
+      
+      // Only cache if we have valid serialized segments
+      if (serializedSegments.length > 0) {
+        cachedDirectionsSegments = JSON.stringify(serializedSegments.map(s => JSON.parse(s)));
+      }
+    }
+    
+    const cachedItinerary = JSON.stringify(itinerary);
+    
+    console.log('[saveTripHandler] Caching directions:', !!cachedDirections, 'segments:', !!cachedDirectionsSegments);
+    
     const journey = {
       userId: "placeholder_user_id",
       start: origin,
@@ -637,6 +886,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
       startTime: new Date(`${tripDate}T${originTime}:00`),
       endTime: new Date(`${tripDate}T${destinationTime}:00`),
       itinerary: itinerary.map((r) => `${r.title}: ${r.description}`).join("\n"),
+      // Cache fields
+      cachedDirections,
+      cachedDirectionsSegments,
+      cachedSegmentsByLeg: segmentsByLeg,
+      cachedItinerary,
     };
     try {
       const res = await fetch("/api/journeys", {
@@ -666,6 +920,38 @@ export function TripProvider({ children }: { children: ReactNode }) {
       alert("No trip selected for editing.");
       return;
     }
+    
+    // Serialize current directions for caching
+    // serializeDirectionsResult returns null if data is already deserialized (cached trip with no new route)
+    const cachedDirections = serializeDirectionsResult(directions);
+    
+    // For segments, only include successfully serialized ones
+    let cachedDirectionsSegments: string | null = null;
+    if (directionsSegments.length > 0) {
+      const serializedSegments = directionsSegments
+        .map(seg => serializeDirectionsResult(seg))
+        .filter((s): s is string => s !== null);
+      
+      if (serializedSegments.length > 0) {
+        cachedDirectionsSegments = JSON.stringify(serializedSegments.map(s => JSON.parse(s)));
+      }
+    }
+    
+    // Check if we're trying to update a cached trip with no fresh data
+    // This happens when user views a cached trip and clicks save without recalculating
+    const hasNoFreshData = !cachedDirections && !cachedDirectionsSegments && 
+                           (directions !== null || directionsSegments.length > 0);
+    
+    if (hasNoFreshData) {
+      console.log('[updateTripHandler] No fresh data to save - showing prompt');
+      setShowNoChangesPrompt(true);
+      return;
+    }
+    
+    const cachedItinerary = JSON.stringify(itinerary);
+    
+    console.log('[updateTripHandler] Caching directions:', !!cachedDirections, 'segments:', !!cachedDirectionsSegments);
+    
     const payload = {
       start: origin,
       destination,
@@ -678,6 +964,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
       startTime: new Date(`${tripDate}T${originTime}:00`),
       endTime: new Date(`${tripDate}T${destinationTime}:00`),
       itinerary: itinerary.map((r) => `${r.title}: ${r.description}`).join("\n"),
+      // Cache fields - only include if we have fresh data
+      cachedDirections,
+      cachedDirectionsSegments,
+      cachedSegmentsByLeg: segmentsByLeg,
+      cachedItinerary,
     };
     try {
       const res = await fetch(`/api/journeys/${editingJourneyId}`, {
@@ -817,11 +1108,12 @@ export function TripProvider({ children }: { children: ReactNode }) {
             "cuncolim": { lat: 15.1767, lng: 73.9933 },
             "assolna": { lat: 15.1950, lng: 73.9600 },
             
-            // South Goa (Mormugao)
+            // South Goa (Mormugao/Sancoale)
             "vasco": { lat: 15.3980, lng: 73.8113 },
             "majorda": { lat: 15.3010, lng: 73.9068 },
             "utorda": { lat: 15.2900, lng: 73.9100 },
             "dabolim": { lat: 15.3808, lng: 73.8314 },
+            "sancoale": { lat: 15.3677, lng: 73.8747 },
             "airport": { lat: 15.3808, lng: 73.8314 },
             "bogmalo": { lat: 15.3750, lng: 73.8150 },
             "chicalim": { lat: 15.3878, lng: 73.8340 },
@@ -831,6 +1123,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
             "bits": { lat: 15.3909, lng: 73.8786 },
             "birla": { lat: 15.3909, lng: 73.8786 },
             "kk birla": { lat: 15.3909, lng: 73.8786 },
+            "bits pilani": { lat: 15.3909, lng: 73.8786 },
+            "bits goa": { lat: 15.3909, lng: 73.8786 },
             "zuarinagar": { lat: 15.3909, lng: 73.8786 },
             "zuari": { lat: 15.3909, lng: 73.8786 },
             
@@ -846,6 +1140,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
             "promenade": { lat: 15.5005, lng: 73.8285 },  // Panjim Promenade
             "panjim market": { lat: 15.4998, lng: 73.8268 },
             "panjim ferry": { lat: 15.5010, lng: 73.8295 },
+            "ferry terminal": { lat: 15.5010, lng: 73.8295 },
             "divja": { lat: 15.4985, lng: 73.8245 },  // Divja Circle
             "library": { lat: 15.4950, lng: 73.8320 },  // Panjim Library area
             "central library": { lat: 15.4950, lng: 73.8320 },
@@ -857,6 +1152,17 @@ export function TripProvider({ children }: { children: ReactNode }) {
             "altinho": { lat: 15.4920, lng: 73.8310 },
             "ktc": { lat: 15.4978, lng: 73.8285 },  // KTC Bus Stand
             "kadamba": { lat: 15.4978, lng: 73.8285 },
+            "parade ground": { lat: 15.4850, lng: 73.8120 },  // Parade Ground area
+            "madhuban": { lat: 15.4820, lng: 73.8100 },  // Madhuban Circle
+            "black sheep": { lat: 15.4750, lng: 73.8070 },  // Black Sheep Bistro (Miramar)
+            "bistro": { lat: 15.4750, lng: 73.8070 },
+            "fab india": { lat: 15.4750, lng: 73.8070 },
+            "braganca": { lat: 15.4750, lng: 73.8070 },
+            "villa braganca": { lat: 15.4750, lng: 73.8070 },
+            "vishal mega": { lat: 15.4989, lng: 73.8278 },  // Vishal Mega Mart (assume central Panaji)
+            "mega mart": { lat: 15.4989, lng: 73.8278 },
+            "toilet": { lat: 15.4989, lng: 73.8278 },  // Public toilets - assume central area
+            "restroom": { lat: 15.4989, lng: 73.8278 },
             
             // Old Goa (for detecting detours)
             "old goa": { lat: 15.5008, lng: 73.9116 },
@@ -967,6 +1273,11 @@ export function TripProvider({ children }: { children: ReactNode }) {
           segDest: string, 
           segDeparture: Date
         ): Promise<{ segments: google.maps.DirectionsResult[], itineraryItems: { title: string; description: string }[], totalDuration: number, totalWalking: number }> => {
+          console.log(`\n========== [findSegmentRoute] ==========`);
+          console.log(`  From: ${segOrigin.substring(0, 50)}...`);
+          console.log(`  To: ${segDest.substring(0, 50)}...`);
+          console.log(`  Time: ${segDeparture.toISOString()}`);
+          console.log(`=========================================\n`);
           
           type RouteOption = {
             segments: google.maps.DirectionsResult[];
@@ -980,7 +1291,114 @@ export function TripProvider({ children }: { children: ReactNode }) {
           
           const candidates: RouteOption[] = [];
           
+          // ===== HELPER: Check if a transit route goes through a specific location =====
+          // IMPORTANT: Only check actual stop names, NOT bus route names in instructions
+          // Bus route names like "muddebehal-belgavi cbt-margao-vasco" contain city names
+          // even if the bus doesn't actually stop there
+          const routeGoesThrough = (result: google.maps.DirectionsResult, detourLocation: string): boolean => {
+            const leg = result.routes?.[0]?.legs?.[0];
+            if (!leg) return false;
+            
+            const detourLower = detourLocation.toLowerCase();
+            for (const step of (leg.steps || [])) {
+              // Only check actual transit stop names, not instructions
+              // Instructions contain bus route names which can be misleading
+              if (step.transit) {
+                const depStop = (step.transit.departure_stop?.name || "").toLowerCase();
+                const arrStop = (step.transit.arrival_stop?.name || "").toLowerCase();
+                if (depStop.includes(detourLower)) {
+                  console.log(`[routeGoesThrough] Found "${detourLocation}" in departure stop: ${depStop}`);
+                  return true;
+                }
+                if (arrStop.includes(detourLower)) {
+                  console.log(`[routeGoesThrough] Found "${detourLocation}" in arrival stop: ${arrStop}`);
+                  return true;
+                }
+              }
+            }
+            return false;
+          };
+          
+          // ===== GENERAL DETOUR DETECTION =====
+          // Reject routes that go through major hubs that are way off the direct path
+          // A hub is "on the way" if: distFromOrigin + distFromDest < directDist * maxRatio
+          const MAJOR_DETOUR_HUBS = [
+            { name: "mapusa", lat: 15.5915, lng: 73.8101, keywords: ["mapusa"] },
+            { name: "margao", lat: 15.2832, lng: 73.9862, keywords: ["margao", "madgaon"] },
+            { name: "old goa", lat: 15.5008, lng: 73.9116, keywords: ["old goa", "gandhi circle", "velha goa", "old goa bypass"] },
+            { name: "ponda", lat: 15.4033, lng: 74.0084, keywords: ["ponda"] },
+            { name: "vasco", lat: 15.3980, lng: 73.8113, keywords: ["vasco", "mormugao"] },
+          ];
+          
+          const checkForAbsurdDetours = (result: google.maps.DirectionsResult): boolean => {
+            const originCoords = getApproxCoords(segOrigin);
+            const destCoords = getApproxCoords(segDest);
+            
+            if (!originCoords || !destCoords) {
+              console.log(`[checkForAbsurdDetours] Can't check - missing coords for origin/dest`);
+              return false; // Can't check without coords
+            }
+            
+            const directDist = haversineDistance(originCoords.lat, originCoords.lng, destCoords.lat, destCoords.lng);
+            console.log(`[checkForAbsurdDetours] Checking ${segOrigin.substring(0,30)}... → ${segDest.substring(0,30)}...`);
+            console.log(`[checkForAbsurdDetours] Direct distance: ${directDist.toFixed(1)}km`);
+            
+            // Log all transit stops for debugging
+            const leg = result.routes?.[0]?.legs?.[0];
+            if (leg) {
+              const stops: string[] = [];
+              for (const step of (leg.steps || [])) {
+                if (step.transit) {
+                  const dep = step.transit.departure_stop?.name || "";
+                  const arr = step.transit.arrival_stop?.name || "";
+                  if (dep) stops.push(dep);
+                  if (arr) stops.push(arr);
+                }
+              }
+              if (stops.length > 0) {
+                console.log(`[checkForAbsurdDetours] Transit stops: ${stops.join(" → ")}`);
+              }
+            }
+            
+            // Check each major hub
+            for (const hub of MAJOR_DETOUR_HUBS) {
+              // Check if route goes through this hub
+              const goesThrough = hub.keywords.some(kw => routeGoesThrough(result, kw));
+              if (!goesThrough) continue;
+              
+              const distFromOrigin = haversineDistance(originCoords.lat, originCoords.lng, hub.lat, hub.lng);
+              const distFromDest = haversineDistance(destCoords.lat, destCoords.lng, hub.lat, hub.lng);
+              const viaHubDist = distFromOrigin + distFromDest;
+              
+              // A hub is "on the way" if going via it doesn't add too much distance
+              // For short routes, allow up to 2x direct distance (buses don't go direct)
+              // For longer routes, allow up to 1.8x direct distance
+              let maxDetourRatio: number;
+              if (directDist < 3) {
+                // Very short route - any major hub is likely a detour
+                maxDetourRatio = 3.0;
+              } else if (directDist < 10) {
+                maxDetourRatio = 2.5;
+              } else {
+                maxDetourRatio = 2.0;
+              }
+              
+              const actualRatio = viaHubDist / directDist;
+              
+              console.log(`[checkForAbsurdDetours] Hub ${hub.name}: via-dist=${viaHubDist.toFixed(1)}km, ratio=${actualRatio.toFixed(2)}, max=${maxDetourRatio}`);
+              
+              if (actualRatio > maxDetourRatio) {
+                console.log(`[checkForAbsurdDetours] ❌ REJECTING: Route goes through ${hub.name} (ratio ${actualRatio.toFixed(2)} > ${maxDetourRatio})`);
+                return true;
+              }
+            }
+            
+            console.log(`[checkForAbsurdDetours] ✅ Route OK - no absurd detours`);
+            return false;
+          };
+          
           // Try direct transit first - this is the preferred option
+          console.log(`[findSegmentRoute] Requesting direct transit...`);
           const directTransit = await routeRequest({
             origin: segOrigin,
             destination: segDest,
@@ -992,7 +1410,21 @@ export function TripProvider({ children }: { children: ReactNode }) {
           });
         
           let directTransitDuration = Infinity;
+          let directTransitRejected = false;
+          
+          if (!directTransit) {
+            console.log(`[findSegmentRoute] ⚠️ No direct transit returned from Google API`);
+          } else if (!hasTransitLeg(directTransit)) {
+            console.log(`[findSegmentRoute] ⚠️ Direct transit has no transit legs (walking only)`);
+          }
+          
           if (directTransit && hasTransitLeg(directTransit)) {
+            console.log(`[findSegmentRoute] Got direct transit, checking for detours...`);
+            // First check: reject if it goes through a major hub unnecessarily (detour)
+            if (checkForAbsurdDetours(directTransit)) {
+              directTransitRejected = true;
+              console.log(`[findSegmentRoute] Direct transit rejected due to detour`);
+            } else {
             const walkDist = getTotalWalkingDistance(directTransit);
             directTransitDuration = getDuration(directTransit);
             candidates.push({
@@ -1003,6 +1435,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
               hasTransit: true,
               isDirect: true,
             });
+            }
           }
 
           // Get walking route for reference and short-distance fallback
@@ -1065,27 +1498,6 @@ export function TripProvider({ children }: { children: ReactNode }) {
               if (dist <= region.radius) return region;
             }
             return null;
-          };
-          
-          // Helper: Check if a transit route goes through a specific location
-          const routeGoesThrough = (result: google.maps.DirectionsResult, detourLocation: string): boolean => {
-            const leg = result.routes?.[0]?.legs?.[0];
-            if (!leg) return false;
-            
-            const detourLower = detourLocation.toLowerCase();
-            for (const step of (leg.steps || [])) {
-              // Check step instructions for detour location names
-              const instructions = (step.instructions || "").toLowerCase();
-              if (instructions.includes(detourLower)) return true;
-              
-              // For transit steps, check stop names
-              if (step.transit) {
-                const depStop = (step.transit.departure_stop?.name || "").toLowerCase();
-                const arrStop = (step.transit.arrival_stop?.name || "").toLowerCase();
-                if (depStop.includes(detourLower) || arrStop.includes(detourLower)) return true;
-              }
-            }
-            return false;
           };
           
           // Helper: Calculate approximate transit route distance by checking stops
@@ -1182,8 +1594,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          // Only try hub-based routes if direct transit wasn't found or took very long
-          const shouldTryHubs = !directTransit || !hasTransitLeg(directTransit) || directTransitDuration > 3600;
+          // Only try hub-based routes if direct transit wasn't found, was rejected, or took very long
+          const shouldTryHubs = !directTransit || !hasTransitLeg(directTransit) || directTransitRejected || directTransitDuration > 3600;
           
           if (shouldTryHubs) {
             // Filter hubs: only consider hubs that are roughly "on the way"
@@ -1246,6 +1658,13 @@ export function TripProvider({ children }: { children: ReactNode }) {
                 });
               
                 if (hubToDestTransit && hasTransitLeg(hubToDestTransit)) {
+                  // Check both segments for absurd detours
+                  const segment1HasDetour = checkForAbsurdDetours(originToHubTransit);
+                  const segment2HasDetour = checkForAbsurdDetours(hubToDestTransit);
+                  
+                  if (segment1HasDetour || segment2HasDetour) {
+                    console.log(`[findSegmentRoute] Skipping hub route via ${hub}: absurd detour detected`);
+                  } else {
                   const totalWalk = getTotalWalkingDistance(originToHubTransit) + getTotalWalkingDistance(hubToDestTransit);
                   const totalDur = getDuration(originToHubTransit) + getDuration(hubToDestTransit);
                   
@@ -1260,6 +1679,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
                       isDirect: false,
                       hubName: hub,
                     });
+                    }
                   }
                 }
               
@@ -1272,7 +1692,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
               
                 if (hubToDestWalk) {
                   const hubToDestWalkDist = getWalkDistance(hubToDestWalk);
-                  if (hubToDestWalkDist <= MAX_WALK_DISTANCE_M) {
+                  // Check origin-to-hub segment for absurd detours
+                  if (hubToDestWalkDist <= MAX_WALK_DISTANCE_M && !checkForAbsurdDetours(originToHubTransit)) {
                     const totalWalk = getTotalWalkingDistance(originToHubTransit) + hubToDestWalkDist;
                     candidates.push({
                       segments: [originToHubTransit, hubToDestWalk],
@@ -1311,6 +1732,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
                   });
           
                   if (hubToDest && hasTransitLeg(hubToDest)) {
+                    // Check hub-to-dest segment for absurd detours
+                    if (!checkForAbsurdDetours(hubToDest)) {
                     const totalWalk = walkToHubDist + getTotalWalkingDistance(hubToDest);
                     candidates.push({
                       segments: [walkToHub, hubToDest],
@@ -1321,6 +1744,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
                       isDirect: false,
                       hubName: hub,
                     });
+                    }
                   }
                 }
               }
@@ -1361,16 +1785,22 @@ export function TripProvider({ children }: { children: ReactNode }) {
             });
             
             const best = candidates[0];
-            console.log(`[findSegmentRoute] Best route: ${best.isDirect ? 'direct' : 'via hub'} ${best.hasTransit ? 'transit' : 'walk'}, duration: ${Math.round(best.totalDuration/60)}min, walking: ${best.totalWalking}m`);
+            console.log(`[findSegmentRoute] ✅ Selected best route:`);
+            console.log(`  Type: ${best.isDirect ? 'direct' : 'via hub'} ${best.hasTransit ? 'transit' : 'walk'}`);
+            console.log(`  Duration: ${Math.round(best.totalDuration/60)}min, Walking: ${best.totalWalking}m`);
+            console.log(`  Segments: ${best.segments.length}`);
             return best;
           }
 
           // FINAL FALLBACK: Bus to closest reachable hub + Cab for the rest
           // This handles cases like BITS to Cavelossim where no direct transit exists
-          console.log(`[findSegmentRoute] No full transit route found. Trying bus + cab fallback...`);
+          console.log(`[findSegmentRoute] ⚠️ No candidates found. Trying bus + cab fallback...`);
+          console.log(`[findSegmentRoute] Total candidates checked: ${candidates.length}`);
           
           // Find the hub closest to destination that we can reach by bus from origin
           const destCoordsFallback = getApproxCoords(segDest);
+          console.log(`[findSegmentRoute] Dest coords: ${destCoordsFallback ? `${destCoordsFallback.lat}, ${destCoordsFallback.lng}` : 'NOT FOUND'}`);
+          
           let bestBusPlusCab: {
             transitRoute: google.maps.DirectionsResult;
             hubName: string;
@@ -1379,8 +1809,10 @@ export function TripProvider({ children }: { children: ReactNode }) {
           } | null = null;
           
           // Try all hubs to find reachable ones
+          console.log(`[findSegmentRoute] Checking ${ALL_HUBS.length} hubs for bus+cab fallback...`);
           for (const hub of ALL_HUBS) {
             try {
+              console.log(`[findSegmentRoute] Trying hub: ${hub.name}`);
               const transitToHub = await routeRequest({
                 origin: segOrigin,
                 destination: hub.name,
@@ -1391,26 +1823,37 @@ export function TripProvider({ children }: { children: ReactNode }) {
                 },
               });
               
-              if (transitToHub && hasTransitLeg(transitToHub)) {
-                // Calculate distance from this hub to destination
-                let hubToDestDist = Infinity;
-                if (destCoordsFallback) {
-                  hubToDestDist = haversineDistance(hub.lat, hub.lng, destCoordsFallback.lat, destCoordsFallback.lng);
-                }
-                
-                // Pick the hub closest to destination (covers most of the journey by bus)
-                if (!bestBusPlusCab || hubToDestDist < bestBusPlusCab.hubToDestDistance) {
-                  bestBusPlusCab = {
-                    transitRoute: transitToHub,
-                    hubName: hub.name,
-                    hubToDestDistance: hubToDestDist,
-                    busDuration: getDuration(transitToHub),
-                  };
-                  console.log(`[findSegmentRoute] Found reachable hub: ${hub.name}, ${hubToDestDist.toFixed(1)}km to destination`);
-                }
+              if (!transitToHub) {
+                console.log(`[findSegmentRoute]   - No route to ${hub.name}`);
+                continue;
+              }
+              
+              if (!hasTransitLeg(transitToHub)) {
+                console.log(`[findSegmentRoute]   - Route to ${hub.name} is walking only`);
+                continue;
+              }
+              
+              console.log(`[findSegmentRoute]   - Got transit route to ${hub.name}`);
+              
+              // Calculate distance from this hub to destination
+              let hubToDestDist = Infinity;
+              if (destCoordsFallback) {
+                hubToDestDist = haversineDistance(hub.lat, hub.lng, destCoordsFallback.lat, destCoordsFallback.lng);
+              }
+              console.log(`[findSegmentRoute]   - Hub ${hub.name} is ${hubToDestDist.toFixed(1)}km from destination`);
+              
+              // Pick the hub closest to destination (covers most of the journey by bus)
+              if (!bestBusPlusCab || hubToDestDist < bestBusPlusCab.hubToDestDistance) {
+                bestBusPlusCab = {
+                  transitRoute: transitToHub,
+                  hubName: hub.name,
+                  hubToDestDistance: hubToDestDist,
+                  busDuration: getDuration(transitToHub),
+                };
+                console.log(`[findSegmentRoute] ✅ Best hub so far: ${hub.name}, ${hubToDestDist.toFixed(1)}km to destination`);
               }
             } catch (e) {
-              // Skip this hub on error
+              console.log(`[findSegmentRoute]   - Error checking hub: ${e}`);
             }
           }
           
@@ -1482,16 +1925,16 @@ export function TripProvider({ children }: { children: ReactNode }) {
           
           // Add intermediate itinerary items (like hub stops and cab recommendations)
           // Note: Walk items are NOT added here because ItineraryView extracts them from directionsSegments
-          result.itineraryItems.forEach(item => {
+            result.itineraryItems.forEach(item => {
             // Include items with a title (hub stops) OR cab recommendations (for bus+cab fallback)
             // Skip walk items - they are already extracted from directionsSegments in ItineraryView
             if (item.title || (item.description.includes("Cab recommended") && !item.description.includes("Walk"))) {
-              allItineraryItems.push(item);
-            }
-          });
+                allItineraryItems.push(item);
+              }
+            });
           
-          // Update departure time for next segment
-          currentDeparture = new Date(currentDeparture.getTime() + result.totalDuration * 1000);
+            // Update departure time for next segment
+            currentDeparture = new Date(currentDeparture.getTime() + result.totalDuration * 1000);
           
           // Add the destination of this segment to itinerary
           if (i < allPoints.length - 2) {
@@ -1638,6 +2081,8 @@ export function TripProvider({ children }: { children: ReactNode }) {
         clearTripState,
         postSaveRedirectToTrips,
         setPostSaveRedirectToTrips,
+        showNoChangesPrompt,
+        setShowNoChangesPrompt,
   pendingPlace,
   setPendingPlace,
   pendingRecalc,
@@ -1694,6 +2139,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
         saveTripHandler,
         updateTripHandler,
         getDirectionsHandler,
+        loadJourneyById,
       }}
     >
       {children}

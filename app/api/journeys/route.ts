@@ -49,6 +49,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Helper: Generate a cache key from route parameters
+function generateRouteCacheKey(start: string, destination: string, waypoints: string[], travelMode: string, filterOption: string): string {
+  const waypointsStr = (waypoints || []).filter(w => w?.trim()).join(',');
+  return `${start}|${destination}|${waypointsStr}|${travelMode}|${filterOption}`;
+}
+
 // ✅ POST /api/journeys — save a new journey
 export async function POST(request: NextRequest) {
   // 1) Check auth
@@ -78,15 +84,24 @@ export async function POST(request: NextRequest) {
     startTime,
     endTime,
     itinerary,
+    // Route cache fields
+    cachedDirections,
+    cachedDirectionsSegments,
+    cachedSegmentsByLeg,
+    cachedItinerary,
   } = body;
 
   console.log('[POST /api/journeys] Received waypointNames:', JSON.stringify(waypointNames));
   console.log('[POST /api/journeys] Received destinationName:', destinationName);
+  console.log('[POST /api/journeys] Has cached directions:', !!cachedDirections || !!cachedDirectionsSegments);
 
   // 4) Create and return
   try {
     // Store waypointNames as JSON string for reliable MongoDB storage
     const waypointNamesJson = JSON.stringify(waypointNames || {});
+    
+    // Generate route cache key for later invalidation checks
+    const routeCacheKey = generateRouteCacheKey(start, destination, waypoints, travelMode, filterOption);
     
     const journey = await Journey.create({
       userId: user._id,
@@ -101,6 +116,13 @@ export async function POST(request: NextRequest) {
       startTime,
       endTime,
       itinerary,
+      // Cache fields
+      cachedDirections: cachedDirections || null,
+      cachedDirectionsSegments: cachedDirectionsSegments || null,
+      cachedSegmentsByLeg: cachedSegmentsByLeg || [],
+      cachedItinerary: cachedItinerary || null,
+      routeCacheKey,
+      cachedAt: (cachedDirections || cachedDirectionsSegments) ? new Date() : null,
     });
     
     // Convert to object and parse JSON for response

@@ -333,7 +333,7 @@ export async function GET(req: NextRequest) {
 
     // Use larger radius for Overpass to capture more local spots
     const overpassRadius = Math.max(radius, 2500);
-    
+
     const overpassQuery = `
       [out:json][timeout:60];
       (
@@ -592,8 +592,8 @@ export async function GET(req: NextRequest) {
             description: "", // Will be generated
             costLevel,
             imageUrl: r.photos && r.photos.length
-              ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${r.photos[0].photo_reference}&key=${apiKey}`
-              : "",
+                ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${r.photos[0].photo_reference}&key=${apiKey}`
+                : "",
             tags: types,
             external_place_id: r.place_id,
             source: "google",
@@ -615,7 +615,7 @@ export async function GET(req: NextRequest) {
       fetchOverpass().catch((e) => { console.error('[amenities] Overpass error:', e); return []; }),
       fetchGooglePlaces().catch((e) => { console.error('[amenities] Google error:', e); return []; }),
     ]);
-    
+
     console.log(`[amenities] Results: goaLocal=${goaLocalResults.length}, overpass=${overpassResults.length}, google=${googleResults.length}`);
     
     // Log category breakdown

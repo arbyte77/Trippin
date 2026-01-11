@@ -34,6 +34,12 @@ export async function DELETE(
   return NextResponse.json({ message: "Journey deleted" }, { status: 200 });
 }
 
+// Helper: Generate a cache key from route parameters
+function generateRouteCacheKey(start: string, destination: string, waypoints: string[], travelMode: string, filterOption: string): string {
+  const waypointsStr = (waypoints || []).filter((w: string) => w?.trim()).join(',');
+  return `${start}|${destination}|${waypointsStr}|${travelMode}|${filterOption}`;
+}
+
 // PUT /api/journeys/:id
 export async function PUT(
   request: NextRequest,
@@ -63,28 +69,54 @@ export async function PUT(
     startTime,
     endTime,
     itinerary,
+    // Route cache fields
+    cachedDirections,
+    cachedDirectionsSegments,
+    cachedSegmentsByLeg,
+    cachedItinerary,
   } = await request.json();
 
   // Store waypointNames as JSON string
   const waypointNamesJson = JSON.stringify(waypointNames || {});
+  
+  // Generate new cache key
+  const routeCacheKey = generateRouteCacheKey(start, destination, waypoints, travelMode, filterOption);
+
+  // Build update object - only include cache fields if provided
+  const updateFields: Record<string, unknown> = {
+    start,
+    destination,
+    destinationName: destinationName || "",
+    waypoints,
+    waypointNamesJson,
+    stopTimes,
+    travelMode,
+    filterOption,
+    startTime,
+    endTime,
+    itinerary,
+    routeCacheKey,
+  };
+  
+  // Only update cache if new cached data is provided
+  if (cachedDirections !== undefined) {
+    updateFields.cachedDirections = cachedDirections;
+    updateFields.cachedAt = new Date();
+  }
+  if (cachedDirectionsSegments !== undefined) {
+    updateFields.cachedDirectionsSegments = cachedDirectionsSegments;
+    updateFields.cachedAt = new Date();
+  }
+  if (cachedSegmentsByLeg !== undefined) {
+    updateFields.cachedSegmentsByLeg = cachedSegmentsByLeg;
+  }
+  if (cachedItinerary !== undefined) {
+    updateFields.cachedItinerary = cachedItinerary;
+  }
 
   const updated = await Journey.findOneAndUpdate(
     { _id: id, userId: user._id },
-    {
-      $set: {
-        start,
-        destination,
-        destinationName: destinationName || "",
-        waypoints,
-        waypointNamesJson,
-        stopTimes,
-        travelMode,
-        filterOption,
-        startTime,
-        endTime,
-        itinerary,
-      },
-    },
+    { $set: updateFields },
     { new: true }
   ).lean();
 

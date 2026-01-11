@@ -51,6 +51,9 @@ export default function ItineraryView({
     forceShowAmenities,
     isLoadingDirections,
     tripDate,
+    showNoChangesPrompt,
+    setShowNoChangesPrompt,
+    savedJourneys,
   } = useTripContext();
 
   // Build display names for nodes - use waypointNames/destinationName where available
@@ -411,6 +414,19 @@ export default function ItineraryView({
       setShowItinerary(false);
     }
   };
+  
+  // Handle "No changes made" prompt
+  const handleNoChangesYes = () => {
+    // Same as cancel - exit to my-trips
+    setShowNoChangesPrompt(false);
+    setEditingJourneyId(null);
+    router.push("/my-trips");
+  };
+  
+  const handleNoChangesNo = () => {
+    // Just close the prompt and stay on the itinerary view
+    setShowNoChangesPrompt(false);
+  };
 
   return (
     <div className="p-6 bg-white">
@@ -634,6 +650,34 @@ export default function ItineraryView({
           Save
         </button>
       </div>
+      
+      {/* No Changes Prompt Modal */}
+      {showNoChangesPrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              No changes made!
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Exit instead?
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleNoChangesNo}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                No
+              </button>
+              <button
+                onClick={handleNoChangesYes}
+                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
