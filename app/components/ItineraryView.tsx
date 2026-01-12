@@ -377,11 +377,15 @@ export default function ItineraryView({
   // Show loading state while directions are being calculated
   if (isLoadingDirections) {
     return (
-      <div className="p-6 bg-white">
-        <h2 className="text-2xl font-bold mb-4 text-gray-900">Your Itinerary</h2>
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-4" />
-          <p className="text-gray-600">Calculating route...</p>
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-2xl font-semibold mb-4 text-[#6B5539]">
+            Your Itinerary
+          </h2>
+          <div className="glass rounded-2xl p-12 flex flex-col items-center justify-center border-2 border-[#4A7C59]">
+            <Loader2 className="h-10 w-10 text-[#4A7C59] animate-spin mb-4" />
+            <p className="text-gray-700 text-lg">Calculating your beach route...</p>
+          </div>
         </div>
       </div>
     );
@@ -429,35 +433,36 @@ export default function ItineraryView({
   };
 
   return (
-    <div className="p-6 bg-white">
-      <h2 className="text-2xl font-bold mb-4 text-gray-900">
-        Your Itinerary
-      </h2>
+    <div className="p-6 relative z-10">
+      <div className="max-w-7xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-4 text-[#6B5539]">
+          Your Itinerary
+        </h2>
 
-      {/* Trip Info Header */}
-      <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
-        <div>
-          {editingJourneyId ? (
-            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-              ID: {editingJourneyId.slice(-8)}
-            </span>
-          ) : (
-            <span className="italic">New Trip</span>
-          )}
+        {/* Trip Info Header */}
+        <div className="flex justify-between items-center mb-6 text-sm">
+          <div>
+            {editingJourneyId ? (
+              <span className="font-mono text-xs glass px-3 py-1.5 rounded-lg text-gray-700">
+                ID: {editingJourneyId.slice(-8)}
+              </span>
+            ) : (
+              <span className="italic glass px-3 py-1.5 rounded-lg text-gray-700">New Trip</span>
+            )}
+          </div>
+          <div>
+            {tripDate && (
+              <span className="glass px-3 py-1.5 rounded-lg text-gray-700">
+                {new Date(tripDate).toLocaleDateString("en-IN", {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+          </div>
         </div>
-        <div>
-          {tripDate && (
-            <span>
-              {new Date(tripDate).toLocaleDateString("en-IN", {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
-            </span>
-          )}
-        </div>
-      </div>
 
       {/* Two-column layout: Timeline on left, Map on right (stacks on mobile) */}
       <div className="flex flex-col lg:flex-row gap-6">
@@ -466,14 +471,14 @@ export default function ItineraryView({
 
         {/* Starting point */}
         <div className="relative mb-4">
-          <div className="bg-gray-50 border p-3 rounded">
-            <div className="text-sm text-gray-500">Starting point</div>
-            <div className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-              <MapPin className="h-4 w-4 text-rose-600" />
+          <div className="glass-terracotta p-4 rounded-xl border border-[#E07856]/30">
+            <div className="text-sm text-gray-600 font-medium">Starting point</div>
+            <div className="text-lg font-semibold text-gray-800 flex items-center space-x-2 mt-1">
+              <MapPin className="h-5 w-5 text-[#E07856]" />
               <span>{nodes[0] || "—"}</span>
             </div>
             {(originTime && originTime.trim()) ? (
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-gray-600 mt-2 bg-white/40 px-2 py-1 rounded-lg inline-block">
                 Leave by {originTime}
               </div>
             ) : null}
@@ -483,10 +488,10 @@ export default function ItineraryView({
       {/* Show any external bus route suggestions from itinerary items (e.g., OSM bus route) */}
       {itinerary.filter(item => item.title.startsWith("🚌")).map((item, idx) => (
         <div key={`osm-${idx}`} className="mb-4">
-          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded">
+          <div className="glass-dark text-white px-4 py-3 rounded-xl border border-[#4A90A4]/30">
             <div className="font-semibold">{item.title}</div>
             {item.description && (
-              <div className="text-sm mt-1">{item.description}</div>
+              <div className="text-sm mt-1 opacity-90">{item.description}</div>
             )}
           </div>
         </div>
@@ -495,7 +500,7 @@ export default function ItineraryView({
 
       {travelMode === "TRANSIT" && noTransitFound ? (
         <div className="mb-4">
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-3 py-2 rounded">
+          <div className="glass-terracotta text-[#C85A3C] px-4 py-3 rounded-xl border border-[#E07856]/30">
             No transit found for the selected time. Showing walking between points.
           </div>
         </div>
@@ -583,31 +588,31 @@ export default function ItineraryView({
 
             {/* Next stop/destination */}
             <div className="relative">
-              <div className="bg-gray-50 border p-3 rounded">
-                <div className="text-sm text-gray-500">
+              <div className={`${idx === nodes.length - 2 ? 'bg-[#2A6F85]' : 'glass'} p-4 rounded-xl border ${idx === nodes.length - 2 ? 'border-[#2A6F85]' : 'border-white/30'}`}>
+                <div className={`text-sm font-medium ${idx === nodes.length - 2 ? 'text-white' : 'text-gray-600'}`}>
                   {idx === nodes.length - 2 ? "Destination" : "Next stop"}
                 </div>
-                <div className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                  <MapPin className="h-4 w-4 text-rose-600" />
+                <div className={`text-lg font-semibold flex items-center space-x-2 mt-1 ${idx === nodes.length - 2 ? 'text-white' : 'text-gray-800'}`}>
+                  <MapPin className={`h-5 w-5 ${idx === nodes.length - 2 ? 'text-white' : 'text-[#4A90A4]'}`} />
                   <span>{node}</span>
                 </div>
                 {/* Subtext for stop times */}
                 {idx === nodes.length - 2 ? (
                   (destinationTime && destinationTime.trim()) ? (
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-white mt-2 bg-white/30 px-2.5 py-1 rounded-lg inline-block font-medium">
                       Arrive by {destinationTime}
                     </div>
                   ) : null
                 ) : (
                   (() => {
-                    const wpIndex = idx - 1; // waypoint index mapping
+                    const wpIndex = idx - 1;
                     const arrive = stopTimes?.[wpIndex]?.arriveBy || "";
                     const leave = stopTimes?.[wpIndex]?.leaveBy || "";
                     const parts: string[] = [];
                     if (arrive) parts.push(`Arrive by ${arrive}`);
                     if (leave) parts.push(`Leave by ${leave}`);
                     return parts.length ? (
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-600 mt-2 bg-white/40 px-2 py-1 rounded-lg inline-block">
                         {parts.join(" • ")}
                       </div>
                     ) : null;
@@ -621,8 +626,8 @@ export default function ItineraryView({
         {/* End of left column */}
 
         {/* Right column - Map Preview (50% width on desktop, sticky on scroll) */}
-        <div className="flex-1 lg:sticky lg:top-6 lg:self-start">
-          <div className="bg-gray-50 border rounded-lg overflow-hidden shadow-sm">
+        <div className="flex-1 lg:sticky lg:top-24 lg:self-start">
+          <div className="glass rounded-2xl overflow-hidden shadow-xl">
             <MiniRouteMap
               start={origin}
               destination={destination}
@@ -633,7 +638,7 @@ export default function ItineraryView({
               isLoaded={!!isLoaded}
               loadError={loadError}
             />
-            <div className="text-xs text-gray-500 text-center p-2 bg-white border-t">
+            <div className="text-xs text-gray-600 text-center p-3 bg-white/30 border-t border-white/20">
               Click the map to open full map view
             </div>
           </div>
@@ -642,27 +647,27 @@ export default function ItineraryView({
       </div>
       {/* End of two-column layout */}
 
-      <div className="mt-6 flex justify-end space-x-3">
+      <div className="mt-8 flex justify-end space-x-3">
         <button
           onClick={handleCancel}
-          className="px-4 py-2 rounded border border-gray-300 text-gray-800 hover:bg-gray-50"
+          className="btn-terracotta text-white px-6 py-2.5 rounded-xl font-medium"
         >
           Cancel
         </button>
         <button
           onClick={handleSave}
-          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white"
+          className="btn-green text-white px-6 py-2.5 rounded-xl font-medium"
         >
-          Save
+          Save Trip
         </button>
       </div>
       
       {/* No Changes Prompt Modal */}
       {showNoChangesPrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              No changes made!
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass rounded-2xl p-8 max-w-md mx-4 shadow-2xl border-2 border-[#4A7C59]">
+            <h3 className="text-xl font-semibold text-[#6B5539] mb-3">
+              No changes made
             </h3>
             <p className="text-gray-600 mb-6">
               Exit instead?
@@ -670,13 +675,13 @@ export default function ItineraryView({
             <div className="flex justify-end space-x-3">
               <button
                 onClick={handleNoChangesNo}
-                className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                className="btn-glass text-gray-700 px-5 py-2 rounded-xl font-medium"
               >
                 No
               </button>
               <button
                 onClick={handleNoChangesYes}
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                className="btn-green text-white px-5 py-2 rounded-xl font-medium"
               >
                 Yes
               </button>
@@ -684,6 +689,8 @@ export default function ItineraryView({
           </div>
         </div>
       )}
+      </div>
+      {/* End of max-w-7xl container */}
     </div>
   );
 }

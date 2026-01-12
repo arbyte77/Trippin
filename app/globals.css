@@ -3,19 +3,154 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Beach Paradise Theme */
+  --beach-sand: #F4E4C1;
+  --beach-sand-light: #FAF3E0;
+  --beach-sand-dark: #E8D4A8;
+  --terracotta: #E07856;
+  --terracotta-dark: #C85A3C;
+  --terracotta-light: #F29479;
+  --palm-green: #4A7C59;
+  --palm-dark: #2D5F3E;
+  --palm-light: #6B9B7E;
+  --tropical-green: #5FAD56;
+  --ocean-blue: #4A90A4;
+  --ocean-light: #87CEEB;
+  --sand-white: #FFFEF9;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--beach-sand-light);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Ocean wave image washing over bottom right corner */
+body::before {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 972px;
+  height: 756px;
+  background-image: url('https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1000&q=80');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at bottom right, black 0%, black 20%, transparent 65%);
+  -webkit-mask-image: radial-gradient(ellipse at bottom right, black 0%, black 20%, transparent 65%);
+}
+
+/* Glassmorphism/Liquid Glass Effects */
+.glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+}
+
+.glass-dark {
+  background: rgba(42, 111, 133, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-terracotta {
+  background: rgba(224, 120, 86, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(224, 120, 86, 0.3);
+}
+
+/* Button liquid glass effects */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.btn-ocean {
+  background: linear-gradient(135deg, var(--ocean-blue), var(--palm-dark));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(74, 144, 164, 0.3);
+}
+
+.btn-ocean:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(74, 144, 164, 0.4);
+  filter: brightness(1.1);
+}
+
+.btn-terracotta {
+  background: linear-gradient(135deg, var(--terracotta), var(--terracotta-dark));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(224, 120, 86, 0.3);
+}
+
+.btn-terracotta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(224, 120, 86, 0.4);
+  filter: brightness(1.1);
+}
+
+.btn-green {
+  background: linear-gradient(135deg, var(--palm-green), var(--palm-dark));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(74, 124, 89, 0.3);
+}
+
+.btn-green:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(74, 124, 89, 0.4);
+  filter: brightness(1.1);
+}
+
+.btn-beachy {
+  background: linear-gradient(135deg, var(--ocean-light), var(--ocean-blue));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(135, 206, 235, 0.4);
+}
+
+.btn-beachy:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(135, 206, 235, 0.5);
+  filter: brightness(1.1);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(244, 228, 193, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, var(--ocean-blue) 40%, var(--ocean-blue) 100%);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, var(--ocean-blue) 30%, #3A7A8A 100%);
 }

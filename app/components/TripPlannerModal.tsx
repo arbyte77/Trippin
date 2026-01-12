@@ -104,23 +104,25 @@ export default function TripPlannerModal({
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white text-black rounded shadow-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">{inEditMode ? "Edit Trip" : "Plan Your Trip"}</h2>
-        <form onSubmit={onGetDirections} className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto border-4 border-[#4A7C59]">
+        <h2 className="text-2xl font-semibold mb-6 text-[#6B5539]">
+          {inEditMode ? "Edit trip" : "Plan trip"}
+        </h2>
+        <form onSubmit={onGetDirections} className="space-y-5">
           {/* Date */}
           <div>
-            <label className="block font-medium mb-1">Date</label>
+            <label className="block font-medium mb-2 text-gray-700">Date</label>
             <input
               type="date"
               value={tripDate}
               onChange={(e) => setTripDate(e.target.value)}
-              className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+              className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
             />
           </div>
           {/* Origin */}
           <div>
-            <label className="block font-medium mb-1">Origin</label>
+            <label className="block font-medium mb-2 text-gray-700">Origin</label>
             <Autocomplete
               onLoad={(auto) => (originRef.current = auto)}
               onPlaceChanged={() => {
@@ -135,15 +137,15 @@ export default function TripPlannerModal({
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="Enter origin"
-                className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
               />
             </Autocomplete>
-            <label className="block text-sm mt-1">Leave by</label>
+            <label className="block text-sm mt-3 mb-1 text-gray-600">Leave by</label>
             <input
               type="time"
               value={originTime}
               onChange={(e) => setOriginTime(e.target.value)}
-              className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+              className="w-full px-4 py-2 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
             />
           </div>
 
@@ -151,15 +153,15 @@ export default function TripPlannerModal({
           <button
             type="button"
             onClick={onAddStop}
-            className="bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-white"
+            className="btn-green text-white px-5 py-2.5 rounded-xl font-medium"
           >
             + Add Stop
           </button>
 
           {/* Dynamic Stops */}
           {waypoints.map((wp, idx) => (
-            <div key={idx} className="border p-2 rounded space-y-2">
-              <label className="block font-medium mb-1">{`Stop ${idx + 1}`}</label>
+            <div key={idx} className="bg-[#FAF3E0] p-4 rounded-xl space-y-3 border-2 border-[#E8D4A8]">
+              <label className="block font-medium mb-1 text-gray-700">Stop {idx + 1}</label>
               <Autocomplete
                 onLoad={(auto) => (waypointRefs.current[idx] = auto)}
                 onPlaceChanged={() => {
@@ -173,38 +175,38 @@ export default function TripPlannerModal({
                   defaultValue={waypointNames[idx] || waypointNames[String(idx)] || wp}
                   onChange={(e) => onUpdateStop(idx, e.target.value)}
                   placeholder={`Enter stop ${idx + 1}`}
-                  className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                  className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
                 />
               </Autocomplete>
               <div className="flex space-x-2">
-                <div>
-                  <label className="block text-sm">Arrive by</label>
+                <div className="flex-1">
+                  <label className="block text-sm mb-1 text-gray-600">Arrive by</label>
                   <input
                     type="time"
                     value={stopTimes[idx]?.arriveBy || ""}
                     onChange={(e) =>
                       onUpdateStopTime(idx, "arriveBy", e.target.value)
                     }
-                    className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                    className="w-full px-3 py-2 border-2 border-[#E8D4A8] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm">Leave by</label>
+                <div className="flex-1">
+                  <label className="block text-sm mb-1 text-gray-600">Leave by</label>
                   <input
                     type="time"
                     value={stopTimes[idx]?.leaveBy || ""}
                     onChange={(e) =>
                       onUpdateStopTime(idx, "leaveBy", e.target.value)
                     }
-                    className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                    className="w-full px-3 py-2 border-2 border-[#E8D4A8] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => onRemoveStop(idx)}
-                  className="bg-red-500 hover:bg-red-600 px-2 py-1 rounded text-white"
+                  className="btn-terracotta text-white px-3 py-2 rounded-xl mt-6"
                 >
-                  –
+                  ✕
                 </button>
               </div>
             </div>
@@ -212,7 +214,7 @@ export default function TripPlannerModal({
 
           {/* Destination */}
           <div>
-            <label className="block font-medium mb-1">Destination</label>
+            <label className="block font-medium mb-2 text-gray-700">Destination</label>
             <Autocomplete
               onLoad={(auto) => (destinationRef.current = auto)}
               onPlaceChanged={() => {
@@ -228,28 +230,28 @@ export default function TripPlannerModal({
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="Enter destination"
-                className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
               />
             </Autocomplete>
-            <label className="block text-sm mt-1">Arrive by</label>
+            <label className="block text-sm mt-3 mb-1 text-gray-600">Arrive by</label>
             <input
               type="time"
               value={destinationTime}
               onChange={(e) => setDestinationTime(e.target.value)}
-              className="w-full px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+              className="w-full px-4 py-2 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
             />
           </div>
 
           {/* Mode & Filters */}
           <div className="flex space-x-4">
             <div className="flex-1">
-              <label className="block font-medium mb-1">Mode of Transport</label>
+              <label className="block font-medium mb-2 text-gray-700">Mode of Transport</label>
               <select
                 value={travelMode}
                 onChange={(e) =>
                   setTravelMode(e.target.value as google.maps.TravelMode)
                 }
-                className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59] text-gray-700 bg-white"
               >
                 <option value="DRIVING">Cab</option>
                 <option value="TRANSIT">Bus</option>
@@ -260,11 +262,11 @@ export default function TripPlannerModal({
 
             {(travelMode === "DRIVING" || travelMode === "TRANSIT") && (
               <div className="flex-1">
-                <label className="block font-medium mb-1">Filters</label>
+                <label className="block font-medium mb-2 text-gray-700">Filters</label>
                 <select
                   value={filterOption}
                   onChange={(e) => setFilterOption(e.target.value)}
-                  className="w-full px-2 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-gray-700"
+                  className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59] text-gray-700 bg-white"
                 >
                   {travelMode === "DRIVING" ? (
                     <>
@@ -284,17 +286,17 @@ export default function TripPlannerModal({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end space-x-4">
+          <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded text-white"
+              className="btn-glass text-gray-700 px-6 py-2.5 rounded-xl font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white"
+              className="btn-green text-white px-6 py-2.5 rounded-xl font-medium"
             >
               {inEditMode ? "Save" : "Start Trippin"}
             </button>

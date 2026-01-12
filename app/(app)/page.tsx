@@ -61,12 +61,12 @@ export default function HomePage() {
   // Recalculation is now handled by AppShell (always mounted)
   
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen relative z-10">
       {/* Recalculation is handled by useEffect above - removed duplicate inline IIFE that caused race conditions */}
       
-      {/* ✅ My Trips View */}
+      {/* My Trips View */}
       {showTrips && (
-        <div className="p-6 bg-white">
+        <div className="p-6">
           <h2 className="text-2xl font-bold mb-4 text-gray-900">My Trips</h2>
           {savedJourneys.map((trip, idx) => (
             <div
@@ -158,11 +158,11 @@ export default function HomePage() {
       {/* RefreshmentModal is now in AppShell for global access */}
 
       {!showItinerary && (
-        <div className="flex items-center justify-center h-[50vh] bg-white border-t">
-          <div className="text-center">
+        <div className="flex items-center justify-center h-[50vh] relative z-10">
+          <div className="text-center glass rounded-2xl p-8 border-2 border-[#4A7C59]">
             <div className="text-xl font-semibold text-gray-900">Map preview moved</div>
             <div className="text-gray-600 mt-1">
-              View each trip’s route in <span className="font-medium">My Trips</span>.
+              View each trip's route in <span className="font-medium">My Trips</span>.
             </div>
           </div>
         </div>

@@ -53,70 +53,77 @@ export default function MyTripsPage() {
   };
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-      <h2 className="text-2xl font-bold mb-4 text-gray-900">My Trips</h2>
-      {savedJourneys.length === 0 ? (
-        <p className="text-gray-600">No saved trips yet.</p>
-      ) : (
-        savedJourneys.map((trip) => (
-            <div
-              key={trip._id}
-              className="mb-4 border p-4 rounded shadow bg-gray-50 space-y-2"
-            >
-              {/* Trip ID and Date header */}
-              <div className="flex justify-between items-center text-xs text-gray-500 mb-1">
-                <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">
-                  ID: {trip._id.slice(-8)}
-                </span>
-                <span>
-                  {new Date(trip.startTime).toLocaleDateString("en-IN", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
+    <div className="p-6 min-h-screen relative z-10">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-6 text-[#6B5539]">
+          My Trips
+        </h2>
+        {savedJourneys.length === 0 ? (
+          <div className="glass rounded-2xl p-12 text-center border-2 border-[#E8D4A8]">
+            <p className="text-gray-600 text-lg">No saved trips yet. Start planning your beach adventure!</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {savedJourneys.map((trip) => (
+              <div
+                key={trip._id}
+                className="glass rounded-2xl p-5 space-y-3 hover:shadow-xl transition-all duration-300 border-2 border-[#E8D4A8]"
+              >
+                {/* Trip ID and Date header */}
+                <div className="flex justify-between items-center text-xs text-gray-600 mb-1">
+                  <span className="font-mono bg-white/40 px-2.5 py-1 rounded-lg">
+                    ID: {trip._id.slice(-8)}
+                  </span>
+                  <span className="bg-white/40 px-2.5 py-1 rounded-lg">
+                    {new Date(trip.startTime).toLocaleDateString("en-IN", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-gray-800">
+                  {trip.start} → {trip.destinationName || trip.destination}
+                </h3>
+                {trip.waypoints && trip.waypoints.length > 0 && (
+                  <p className="text-sm text-gray-600">
+                    via {trip.waypoints.map((wp: string, i: number) => 
+                      trip.waypointNames?.[i] || wp
+                    ).join(", ")}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    onClick={() => handleEditTrip(trip._id)}
+                    className="btn-green text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <Pencil className="h-4 w-4" /> Edit
+                  </button>
+                  <button
+                    onClick={() => deleteTripHandler(trip._id)}
+                    className="btn-terracotta text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <Trash className="h-4 w-4" /> Delete
+                  </button>
+                  <button
+                    onClick={() => handleViewTrip(trip._id)}
+                    className="btn-glass text-gray-700 px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <Eye className="h-4 w-4" /> View Trip
+                  </button>
+                  <button
+                    onClick={() => handleSeeAmenities(trip._id)}
+                    className="btn-glass text-gray-700 px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <MapPin className="h-4 w-4" /> Amenities
+                  </button>
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900">
-                {trip.start} → {trip.destinationName || trip.destination}
-              </h3>
-              {trip.waypoints && trip.waypoints.length > 0 && (
-                <p className="text-sm text-gray-600">
-                  via {trip.waypoints.map((wp: string, i: number) => 
-                    trip.waypointNames?.[i] || wp
-                  ).join(", ")}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2 mt-2">
-                <button
-                  onClick={() => handleEditTrip(trip._id)}
-                  className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded"
-                >
-                  <Pencil className="h-4 w-4 mr-1" /> Edit
-                </button>
-                <button
-                  onClick={() => deleteTripHandler(trip._id)}
-                  className="flex items-center bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
-                >
-                  <Trash className="h-4 w-4 mr-1" /> Delete
-                </button>
-                <button
-                  onClick={() => handleViewTrip(trip._id)}
-                  className="flex items-center border border-gray-300 hover:bg-gray-50 text-gray-800 px-3 py-1 rounded"
-                >
-                  <Eye className="h-4 w-4 mr-1" /> 
-                  View Trip
-                </button>
-                <button
-                  onClick={() => handleSeeAmenities(trip._id)}
-                  className="flex items-center border border-gray-300 hover:bg-gray-50 text-gray-800 px-3 py-1 rounded"
-                >
-                  <MapPin className="h-4 w-4 mr-1" /> See Amenities
-                </button>
-              </div>
-            </div>
-        ))
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

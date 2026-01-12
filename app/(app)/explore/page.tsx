@@ -126,55 +126,58 @@ export default function ExplorePage() {
   };
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-  <h2 className="text-2xl font-bold mb-4 text-gray-900">Explore Goa</h2>
+    <div className="p-6 min-h-screen relative z-10">
+      <div className="max-w-7xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-6 text-[#6B5539]">
+          Explore Goa
+        </h2>
 
-      <div className="mb-4">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search places, restaurants, activities..."
-          className="w-full border rounded p-2"
-        />
-      </div>
+        <div className="mb-6">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search places, restaurants, activities..."
+            className="w-full border-2 border-[#E8D4A8] rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
+          />
+        </div>
 
-  {loading && <div className="text-sm text-gray-900">Searching...</div>}
+        {loading && <div className="text-sm text-gray-700">Searching...</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {results.map((r, i) => {
-          const addr = r.location?.address || r.description || "";
-          const lat = r.location?.lat;
-          const lng = r.location?.lng;
-          const km = loc && lat && lng ? haversineKm(loc.lat, loc.lng, lat, lng).toFixed(1) : null;
-          const rating = r.reviews && r.reviews.length ? r.reviews[0].rating : null;
-          return (
-            <div key={i} className="border rounded p-4 flex gap-4">
-              <div className="w-24 h-24 bg-indigo-50 flex-shrink-0 rounded overflow-hidden">
-                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-sm text-indigo-400">No image</div>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {results.map((r, i) => {
+            const addr = r.location?.address || r.description || "";
+            const lat = r.location?.lat;
+            const lng = r.location?.lng;
+            const km = loc && lat && lng ? haversineKm(loc.lat, loc.lng, lat, lng).toFixed(1) : null;
+            const rating = r.reviews && r.reviews.length ? r.reviews[0].rating : null;
+            return (
+              <div key={i} className="glass border-2 border-[#E8D4A8] rounded-xl p-4 flex gap-4 hover:shadow-lg transition-all">
+                <div className="w-24 h-24 bg-[#FAF3E0] flex-shrink-0 rounded-lg overflow-hidden">
+                {r.imageUrl ? <img src={r.imageUrl} alt={r.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-sm text-gray-400">No image</div>}
               </div>
               <div className="flex-1">
                 <div className="flex justify-between items-start gap-2">
                   <div>
-                    <h3 className="font-semibold text-lg text-gray-900">{r.name}</h3>
-                    <div className="text-sm text-gray-900">{r.type} • {addr}</div>
-                    <div className="text-sm text-gray-900 mt-1">{r.costLevel ? `Cost: ${r.costLevel}` : null}</div>
+                    <h3 className="font-semibold text-lg text-gray-800">{r.name}</h3>
+                    <div className="text-sm text-gray-600">{r.type} • {addr}</div>
+                    <div className="text-sm text-gray-600 mt-1">{r.costLevel ? `Cost: ${r.costLevel}` : null}</div>
                   </div>
-                  <div className="text-right text-sm text-gray-900">
+                  <div className="text-right text-sm text-gray-600">
                     {km ? <div>{km} km</div> : <div>— km</div>}
                     {rating ? <div>⭐ {rating}</div> : null}
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-900 mt-2">{r.description || ""}</p>
+                <p className="text-sm text-gray-700 mt-2">{r.description || ""}</p>
 
                 {/* show first review snippet if available */}
                 {r.reviews && r.reviews.length ? (
-                  <div className="mt-2 text-sm text-gray-900">"{r.reviews[0].text || 'No review text.'}"</div>
+                  <div className="mt-2 text-sm text-gray-600 italic">"{r.reviews[0].text || 'No review text.'}"</div>
                 ) : null}
 
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => handleBookmark(r)} className="px-3 py-1 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800">{bookmarking === r.name ? "..." : "Bookmark"}</button>
-                  <button onClick={() => handleAddToTrip(r)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add to trip</button>
+                  <button onClick={() => handleBookmark(r)} className="btn-glass text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">{bookmarking === r.name ? "..." : "Bookmark"}</button>
+                  <button onClick={() => handleAddToTrip(r)} className="btn-green text-white px-3 py-1.5 rounded-lg text-sm font-medium">Add to trip</button>
                 </div>
               </div>
             </div>
@@ -182,35 +185,41 @@ export default function ExplorePage() {
         })}
       </div>
 
-      {/* Add-to-trip modal */}
-      {showAddToTripFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded w-full max-w-md">
-            <h4 className="text-lg font-semibold mb-3 text-gray-900">Add "{showAddToTripFor.name}" to a trip</h4>
-            {ctx.savedJourneys && ctx.savedJourneys.length ? (
-              <div className="space-y-2 max-h-64 overflow-auto">
-                {ctx.savedJourneys.map((j: any) => (
-                  <div key={j._id} className="flex justify-between items-center border rounded p-2">
-                    <div>
-                      <div className="font-medium text-gray-900">{j.start} → {j.destination}</div>
-                      <div className="text-sm text-gray-900">{new Date(j.startTime).toLocaleString()}</div>
+        {/* Add-to-trip modal */}
+        {showAddToTripFor && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="glass rounded-2xl p-6 w-full max-w-md border-2 border-[#4A7C59]">
+              <h4 className="text-lg font-semibold mb-4 text-[#6B5539]">
+                Add to trip
+              </h4>
+              <p className="text-sm text-gray-700 mb-4">
+                Adding "{showAddToTripFor.name}"
+              </p>
+              {ctx.savedJourneys && ctx.savedJourneys.length ? (
+                <div className="space-y-2 max-h-64 overflow-auto">
+                  {ctx.savedJourneys.map((j: any) => (
+                    <div key={j._id} className="flex justify-between items-center border-2 border-[#E8D4A8] rounded-lg p-3 bg-white/50">
+                      <div>
+                        <div className="font-medium text-gray-800">{j.start} → {j.destination}</div>
+                        <div className="text-sm text-gray-600">{new Date(j.startTime).toLocaleString()}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => confirmAddToTrip(j._id)} className="btn-green text-white px-4 py-1.5 rounded-lg text-sm font-medium">Add</button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => confirmAddToTrip(j._id)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Add</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div>No saved trips. Save a trip first to add places.</div>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-600">No saved trips. Save a trip first to add places.</div>
+              )}
 
-            <div className="mt-4 text-right">
-              <button onClick={() => setShowAddToTripFor(null)} className="px-3 py-1 bg-indigo-100 hover:bg-indigo-200 rounded text-sm text-indigo-800">Close</button>
+              <div className="mt-4 text-right">
+                <button onClick={() => setShowAddToTripFor(null)} className="btn-glass text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">Close</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

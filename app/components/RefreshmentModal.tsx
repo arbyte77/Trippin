@@ -9,6 +9,24 @@ import {
 } from "lucide-react";
 import { useTripContext } from "../context/TripContext";
 
+// Scoped thin scrollbar for amenities modal
+const thinScrollbarStyles = `
+  .amenities-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .amenities-scrollbar::-webkit-scrollbar-track {
+    background: rgba(244, 228, 193, 0.3);
+  }
+  .amenities-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, #4A90A4 40%, #4A90A4 100%);
+    border-radius: 3px;
+  }
+  .amenities-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, #4A90A4 30%, #3A7A8A 100%);
+  }
+`;
+
 export default function RefreshmentModal() {
   const router = useRouter();
   const {
@@ -307,16 +325,19 @@ export default function RefreshmentModal() {
   if (!showRefreshmentModal) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded shadow-lg max-w-2xl w-full mx-4">
-        <div className="p-4 border-b">
-          <div className="text-lg font-semibold text-gray-900">Quick pit stop suggestions</div>
-          {refreshmentNote ? <div className="text-sm text-gray-600 mt-1">{refreshmentNote}</div> : null}
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <style>{thinScrollbarStyles}</style>
+      <div className="bg-[#FAF3E0] rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[85vh] flex flex-col border-2 border-[#4A7C59]">
+        <div className="p-5 border-b border-[#E8D4A8]">
+          <div className="text-xl font-semibold text-[#6B5539]">
+            Quick pit stop suggestions
+          </div>
+          {refreshmentNote ? <div className="text-sm text-gray-700 mt-2">{refreshmentNote}</div> : null}
         </div>
         <div className="px-4 pt-3">
-          <label className="block text-sm font-medium mb-1">Insert at</label>
+          <label className="block text-sm font-medium mb-1 text-gray-700">Insert at</label>
           <select
-            className="w-full border rounded p-2"
+            className="w-full border-2 border-[#E8D4A8] rounded-xl p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"
             value={posIndex}
             onChange={(e) => setPosIndex(parseInt(e.target.value, 10))}
           >
@@ -336,20 +357,20 @@ export default function RefreshmentModal() {
         </div>
         {/* Search bar */}
         {refreshmentItems.length > 0 && !isLoadingAmenities && (
-          <div className="px-4 py-2 border-b">
+          <div className="px-5 py-3 border-b border-[#E8D4A8]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
               <input
                 type="text"
                 placeholder="Search by name, location, or type..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border-2 border-[#E8D4A8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59] placeholder-gray-500"
               />
               {searchQuery && (
                 <button
                   onClick={clearSearch}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -360,46 +381,37 @@ export default function RefreshmentModal() {
         
         {/* Category tabs */}
         {refreshmentItems.length > 0 && !isLoadingAmenities && (
-          <div className="border-b bg-gray-50">
-            <div className="flex overflow-x-auto px-2 py-1 gap-1 scrollbar-hide">
+          <div className="border-b border-[#E8D4A8] bg-[#F4E4C1]">
+            <div className="flex overflow-x-auto px-3 py-2 gap-2 amenities-scrollbar">
               {categories.map((cat) => {
                 const count = categoryCounts[cat.id] || 0;
                 if (cat.id !== "all" && count === 0) return null;
                 
                 const isActive = categoryFilter === cat.id;
-                const colorClasses: Record<string, { active: string; inactive: string }> = {
-                  gray: { active: "bg-gray-800 text-white", inactive: "bg-white text-gray-700 hover:bg-gray-100 border-gray-300" },
-                  indigo: { active: "bg-indigo-600 text-white", inactive: "bg-white text-indigo-700 hover:bg-indigo-50 border-indigo-300" },
-                  purple: { active: "bg-purple-600 text-white", inactive: "bg-white text-purple-700 hover:bg-purple-50 border-purple-300" },
-                  blue: { active: "bg-blue-600 text-white", inactive: "bg-white text-blue-700 hover:bg-blue-50 border-blue-300" },
-                  green: { active: "bg-green-600 text-white", inactive: "bg-white text-green-700 hover:bg-green-50 border-green-300" },
-                  orange: { active: "bg-orange-600 text-white", inactive: "bg-white text-orange-700 hover:bg-orange-50 border-orange-300" },
-                  pink: { active: "bg-pink-600 text-white", inactive: "bg-white text-pink-700 hover:bg-pink-50 border-pink-300" },
-                  slate: { active: "bg-slate-600 text-white", inactive: "bg-white text-slate-700 hover:bg-slate-50 border-slate-300" },
-                };
-                const colors = colorClasses[cat.color] || colorClasses.gray;
                 
                 return (
                   <button
                     key={cat.id}
                     onClick={() => setCategoryFilter(cat.id)}
-                    className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
-                      isActive ? colors.active : colors.inactive
+                    className={`flex-shrink-0 px-4 py-2 text-xs font-medium rounded-xl transition-all ${
+                      isActive 
+                        ? "btn-green text-white shadow-lg" 
+                        : "bg-white/60 text-gray-700 hover:bg-white border border-[#E8D4A8]"
                     }`}
                   >
-                    <span className="mr-1">{cat.icon}</span>
+                    <span className="mr-1.5">{cat.icon}</span>
                     {cat.label}
-                    <span className={`ml-1 ${isActive ? "opacity-80" : "opacity-60"}`}>({count})</span>
+                    <span className={`ml-1.5 ${isActive ? "opacity-90" : "opacity-70"}`}>({count})</span>
                   </button>
                 );
               })}
             </div>
           </div>
         )}
-        <div className="p-4 max-h-[55vh] overflow-y-auto">
+        <div className="p-4 flex-1 overflow-y-auto amenities-scrollbar">
           {isLoadingAmenities ? (
             <div className="flex flex-col items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 text-blue-600 animate-spin mb-3" />
+              <Loader2 className="h-6 w-6 text-[#4A7C59] animate-spin mb-3" />
               <p className="text-sm text-gray-600">Finding nearby amenities...</p>
             </div>
           ) : filteredItems && filteredItems.length ? (
@@ -409,7 +421,7 @@ export default function RefreshmentModal() {
                 <span>
                   Showing {filteredItems.length} 
                   {filteredItems.length !== refreshmentItems.length && ` of ${refreshmentItems.length}`} pit stops
-                  {searchQuery && <span className="text-blue-600"> matching "{searchQuery}"</span>}
+                  {searchQuery && <span className="text-[#4A7C59] font-medium"> matching "{searchQuery}"</span>}
                 </span>
                 <span className="text-gray-400">
                   {categoryFilter === "all" && !searchQuery.trim() 
@@ -486,7 +498,7 @@ export default function RefreshmentModal() {
                 };
                 
                 return (
-                  <li key={i} className="border rounded-lg overflow-hidden">
+                  <li key={i} className="bg-white border-2 border-[#E8D4A8] rounded-xl overflow-hidden hover:shadow-md transition-shadow">
                     <div className="flex items-center p-3">
                   {p.imageUrl ? (
                     <img src={p.imageUrl} alt={p.name} className="w-16 h-16 object-cover rounded mr-3" />
@@ -504,14 +516,14 @@ export default function RefreshmentModal() {
                             </span>
                           )}
                           {/* Source indicator - visible in list */}
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                             p.source === "goa_local" 
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
                               : p.source === "overpass" 
                                 ? "bg-amber-50 text-amber-700 border border-amber-200" 
                                 : "bg-blue-50 text-blue-600 border border-blue-200"
                           }`}>
-                            {p.source === "goa_local" ? "📍" : p.source === "overpass" ? "🗺️" : "🔵"}
+                            {p.source === "goa_local" ? "Local" : p.source === "overpass" ? "OSM" : "Google"}
                           </span>
                           {p.isVerified && (
                             <span className="text-xs text-green-600">✓</span>
@@ -535,7 +547,7 @@ export default function RefreshmentModal() {
                         </button>
                     <button
                       onClick={() => onAdd(p)}
-                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                          className="btn-green text-white text-sm px-4 py-1.5 rounded-lg font-medium"
                     >
                       Add
                     </button>
@@ -544,7 +556,7 @@ export default function RefreshmentModal() {
                     
                     {/* Expanded amenity details - works for all sources */}
                     {isExpanded && hasDetails && (
-                      <div className="px-4 pb-4 pt-2 bg-gray-50 border-t text-sm">
+                      <div className="px-4 pb-4 pt-2 bg-[#FAF3E0] border-t border-[#E8D4A8] text-sm">
                         {/* Description */}
                         {p.description && (
                           <div className="flex items-start gap-2 mb-2">
@@ -655,7 +667,7 @@ export default function RefreshmentModal() {
                                 ? "bg-amber-100 text-amber-800" 
                                 : "bg-blue-100 text-blue-700"
                           }`}>
-                            {p.source === "goa_local" ? "📍 Verified Local" : p.source === "overpass" ? "🗺️ OpenStreetMap" : "🔵 Google"}
+                            {p.source === "goa_local" ? "Verified Local" : p.source === "overpass" ? "OpenStreetMap" : "Google"}
                           </span>
                         )}
                         
@@ -692,8 +704,7 @@ export default function RefreshmentModal() {
             </>
           ) : refreshmentItems.length > 0 ? (
             <div className="text-sm text-gray-700 py-8 text-center">
-              <div className="text-gray-400 text-4xl mb-3">🔍</div>
-              <p className="font-medium">No results found</p>
+              <p className="font-medium text-lg">No results found</p>
               <p className="text-gray-500 mt-1">
                 {searchQuery ? `No matches for "${searchQuery}"` : `No ${categories.find(c => c.id === categoryFilter)?.label || categoryFilter} spots`}
               </p>
@@ -701,7 +712,7 @@ export default function RefreshmentModal() {
                 {searchQuery && (
                   <button 
                     onClick={clearSearch} 
-                    className="text-blue-600 hover:underline text-sm"
+                    className="text-[#4A7C59] hover:underline text-sm font-medium"
                   >
                     Clear search
                   </button>
@@ -709,7 +720,7 @@ export default function RefreshmentModal() {
                 {categoryFilter !== "all" && (
                   <button 
                     onClick={() => setCategoryFilter("all")} 
-                    className="text-blue-600 hover:underline text-sm"
+                    className="text-[#4A7C59] hover:underline text-sm font-medium"
                   >
                     Show all categories
                   </button>
@@ -718,13 +729,12 @@ export default function RefreshmentModal() {
             </div>
           ) : (
             <div className="text-sm text-gray-700 py-8 text-center">
-              <div className="text-gray-400 text-4xl mb-3">📍</div>
-              <p>No pit stops found nearby.</p>
+              <p className="font-medium text-lg">No pit stops found nearby.</p>
               <p className="text-gray-500 mt-1">Try a different location!</p>
             </div>
           )}
         </div>
-        <div className="p-4 border-t flex justify-end">
+        <div className="p-5 border-t border-[#E8D4A8] flex justify-end">
           <button
             onClick={() => {
               setShowRefreshmentModal(false);
@@ -733,7 +743,7 @@ export default function RefreshmentModal() {
                 router.push("/my-trips");
               }
             }}
-            className="px-4 py-2 rounded border border-gray-300 text-gray-800 hover:bg-gray-50"
+            className="btn-glass text-gray-700 px-6 py-2.5 rounded-xl font-medium"
           >
             Close
           </button>
