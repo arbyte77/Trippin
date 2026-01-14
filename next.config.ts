@@ -6,6 +6,30 @@ const nextConfig = {
   turbopack: {
     root: "/Users/rsi114/Downloads/IdeaProjects/Trippin",
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.tripadvisor.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.holidify.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.goatourism.gov.in',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+      },
+    ],
+  },
   async headers() {
     return [
       {

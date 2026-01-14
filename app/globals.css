@@ -85,6 +85,20 @@ body::before {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
+.btn-glass-static {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.btn-glass-static:hover {
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
 .btn-ocean {
   background: linear-gradient(135deg, var(--ocean-blue), var(--palm-dark));
   border: 1px solid rgba(255, 255, 255, 0.3);

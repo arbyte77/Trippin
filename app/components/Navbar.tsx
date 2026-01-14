@@ -21,6 +21,7 @@ export default function Navbar() {
     setDestinationName,
     setWaypointNames,
     clearTripState,
+    setShowItinerary,
   } = useTripContext();
 
   // Close dropdown when clicking outside
@@ -43,7 +44,10 @@ export default function Navbar() {
   return (
     <nav className="bg-[#F4E4C1] border-b-4 border-[#C8B896] px-6 py-4 sticky top-0 z-50 shadow-lg">
       <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex-shrink-0 cursor-pointer group" onClick={() => router.push("/")}> 
+        <div className="flex-shrink-0 cursor-pointer group" onClick={() => {
+          setShowItinerary(false);
+          router.push("/");
+        }}> 
           <h1 className="text-3xl font-bold bg-gradient-to-r from-[#4A7C59] via-[#E07856] to-[#87CEEB] bg-clip-text text-transparent transition-all group-hover:scale-105">
             🌴 TRIPPIN&apos;
           </h1>
@@ -53,7 +57,10 @@ export default function Navbar() {
           {/* Home Button */}
           <button 
             className="btn-glass text-gray-700 px-4 py-2 rounded-lg font-medium"
-            onClick={() => router.push("/")}
+            onClick={() => {
+              setShowItinerary(false);
+              router.push("/");
+            }}
           >
             Home
           </button>
