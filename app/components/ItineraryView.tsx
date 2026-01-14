@@ -466,8 +466,8 @@ export default function ItineraryView({
 
       {/* Two-column layout: Timeline on left, Map on right (stacks on mobile) */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left column - Timeline (50% width on desktop) */}
-        <div className="flex-1 relative">
+        {/* Left column - Timeline (50% width on desktop) - Scrollable */}
+        <div className="flex-1 relative lg:max-h-[calc(100vh-250px)] lg:overflow-y-auto lg:pr-2">
 
         {/* Starting point */}
         <div className="relative mb-4">
@@ -626,8 +626,8 @@ export default function ItineraryView({
         {/* End of left column */}
 
         {/* Right column - Map Preview (50% width on desktop, sticky on scroll) */}
-        <div className="flex-1 lg:sticky lg:top-24 lg:self-start">
-          <div className="glass rounded-2xl overflow-hidden shadow-xl">
+        <div className="flex-1 lg:sticky lg:top-24 lg:self-start flex flex-col">
+          <div className="glass rounded-2xl overflow-hidden shadow-xl flex-shrink-0">
             <MiniRouteMap
               start={origin}
               destination={destination}
@@ -642,25 +642,26 @@ export default function ItineraryView({
               Click the map to open full map view
             </div>
           </div>
+          
+          {/* Buttons - Positioned to align with bottom of itinerary */}
+          <div className="mt-auto pt-6 flex justify-end space-x-3">
+            <button
+              onClick={handleCancel}
+              className="btn-terracotta text-white px-6 py-2.5 rounded-xl font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="btn-green text-white px-6 py-2.5 rounded-xl font-medium"
+            >
+              Save Trip
+            </button>
+          </div>
         </div>
         {/* End of right column */}
       </div>
       {/* End of two-column layout */}
-
-      <div className="mt-8 flex justify-end space-x-3">
-        <button
-          onClick={handleCancel}
-          className="btn-terracotta text-white px-6 py-2.5 rounded-xl font-medium"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          className="btn-green text-white px-6 py-2.5 rounded-xl font-medium"
-        >
-          Save Trip
-        </button>
-      </div>
       
       {/* No Changes Prompt Modal */}
       {showNoChangesPrompt && (
