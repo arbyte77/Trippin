@@ -2,7 +2,6 @@
 const nextConfig = {
   // Force correct workspace root for Turbopack (fixes multi-lockfile mis-detection)
   // See: https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory
-  // @ts-expect-error - turbopack is not yet typed in NextConfig
   turbopack: {
     root: "/Users/rsi114/Downloads/IdeaProjects/Trippin",
   },

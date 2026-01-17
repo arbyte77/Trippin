@@ -8,15 +8,21 @@
     "start": "next start",
     "lint": "next lint",
     "seed:amenities": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/seed-amenities.ts",
+    "seed:events": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/seed-events.ts",
     "scrape:goa-tourism": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/scrape-goa-tourism.ts",
     "scrape:goa-tourism-v2": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/scrape-goa-tourism-v2.ts",
-    "scrape:goa-food": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/scrape-goa-food.ts"
+    "scrape:goa-food": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/scrape-goa-food.ts",
+    "events:list": "npx tsx scripts/manage-events.ts list",
+    "events:stats": "npx tsx scripts/manage-events.ts stats",
+    "events:cleanup": "npx tsx scripts/manage-events.ts cleanup",
+    "events:update-dates": "npx tsx scripts/manage-events.ts update-dates"
   },
   "dependencies": {
     "@next/env": "^15.1.6",
     "@react-google-maps/api": "^2.20.5",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
+    "dotenv": "^17.2.3",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.525.0",
     "mongodb": "^6.12.0",

@@ -254,7 +254,7 @@ export function TripProvider({ children }: { children: ReactNode }) {
       setRefreshmentNote(null);
       setShowRefreshmentModal(true); // Show modal early with loading state
       const stops = waypoints.filter((w) => (w || "").trim());
-      let insertIdx = 0;
+      const insertIdx = 0;
       
       // Search radius: 3km near each stop/destination
       const SEARCH_RADIUS_M = 3000;

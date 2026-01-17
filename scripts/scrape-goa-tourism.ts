@@ -14,6 +14,11 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 import mongoose from "mongoose";
+import { config } from "dotenv";
+import path from "path";
+
+// Load environment variables from .env.local
+config({ path: path.resolve(__dirname, "../.env.local") });
 
 const BASE_URL = "https://goa-tourism.com";
 

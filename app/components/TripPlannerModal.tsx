@@ -95,7 +95,8 @@ export default function TripPlannerModal({
     waypoints.forEach((wp, idx) => {
       if (waypointInputRefs.current[idx]) {
         // Prefer friendly name over coordinates - try both numeric and string keys
-        const name = waypointNames[idx] || waypointNames[String(idx)] || wp;
+        const names = waypointNames as any;
+        const name = waypointNames[idx] || names[String(idx)] || wp;
         waypointInputRefs.current[idx]!.value = name;
       }
     });
@@ -171,8 +172,8 @@ export default function TripPlannerModal({
               >
                 <input
                   type="text"
-                  ref={(el) => (waypointInputRefs.current[idx] = el)}
-                  defaultValue={waypointNames[idx] || waypointNames[String(idx)] || wp}
+                  ref={(el) => { waypointInputRefs.current[idx] = el; }}
+                  defaultValue={(waypointNames as any)[idx] || (waypointNames as any)[String(idx)] || wp}
                   onChange={(e) => onUpdateStop(idx, e.target.value)}
                   placeholder={`Enter stop ${idx + 1}`}
                   className="w-full px-4 py-2.5 border-2 border-[#E8D4A8] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#4A7C59] focus:border-[#4A7C59]"

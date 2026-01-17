@@ -172,14 +172,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   // perform the insertion
   // ensure insertAt is defined for TypeScript and runtime safety
-  if (typeof insertAt === "undefined") insertAt = journey.waypoints.length;
+  const insertIndex: number = insertAt ?? journey.waypoints.length;
 
   // Build new arrays with the insertion
   const newWaypoints = [...(journey.waypoints || [])];
-  newWaypoints.splice(insertAt, 0, placeLocation);
+  newWaypoints.splice(insertIndex, 0, placeLocation);
   
   const newStopTimes = [...(journey.stopTimes || [])];
-  newStopTimes.splice(insertAt, 0, providedStop || { arriveBy: "", leaveBy: "" });
+  newStopTimes.splice(insertIndex, 0, providedStop || { arriveBy: "", leaveBy: "" });
   
   // Update waypointNames: parse from JSON, shift existing names, add new name
   const existingNames: Record<string, string> = JSON.parse(journey.waypointNamesJson || "{}");
@@ -187,14 +187,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const newWaypointNames: Record<string, string> = {};
   Object.entries(existingNames).forEach(([key, val]) => {
     const k = parseInt(key, 10);
-    if (k >= insertAt!) {
+    if (k >= insertIndex) {
       newWaypointNames[String(k + 1)] = val; // Shift up
     } else {
       newWaypointNames[String(k)] = val; // Keep as-is
     }
   });
-  // Add the new display name at insertAt
-  newWaypointNames[String(insertAt)] = displayName;
+  // Add the new display name at insertIndex
+  newWaypointNames[String(insertIndex)] = displayName;
   
   // Convert back to JSON string for storage
   const newWaypointNamesJson = JSON.stringify(newWaypointNames);
@@ -208,8 +208,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     newItinerary = entry;
   } else {
     const lines = newItinerary.split("\n");
-    if (insertAt >= lines.length) lines.push(entry);
-    else lines.splice(insertAt, 0, entry);
+    if (insertIndex >= lines.length) lines.push(entry);
+    else lines.splice(insertIndex, 0, entry);
     newItinerary = lines.join("\n");
   }
 

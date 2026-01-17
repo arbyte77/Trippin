@@ -19,6 +19,7 @@ export default function HomePage() {
   });
   const {
     setWaypoints,
+    waypointNames,
     setWaypointNames,
     setStopTimes,
     showModal,
@@ -31,6 +32,7 @@ export default function HomePage() {
     setOriginTime,
     destination,
     setDestination,
+    destinationName,
     setDestinationName,
     destinationTime,
     setDestinationTime,
@@ -144,10 +146,12 @@ export default function HomePage() {
           originTime={originTime}
           setOriginTime={setOriginTime}
           destination={destination}
+          destinationName={destinationName}
           setDestination={setDestination}
           destinationTime={destinationTime}
           setDestinationTime={setDestinationTime}
           waypoints={waypoints}
+          waypointNames={waypointNames}
           stopTimes={stopTimes}
           onAddStop={addStop}
           onRemoveStop={removeStop}

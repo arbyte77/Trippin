@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTripContext } from "../../context/TripContext";
 
-export default function AddToTripPage() {
+function AddToTripContent() {
   const params = useSearchParams();
   const router = useRouter();
   const tripIdParam = params.get("tripId");
@@ -155,5 +155,13 @@ export default function AddToTripPage() {
         <button onClick={() => { setPendingPlace(null); router.push('/'); }} className="px-4 py-2 bg-gray-200 rounded">Cancel</button>
       </div>
     </div>
+  );
+}
+
+export default function AddToTripPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading...</div>}>
+      <AddToTripContent />
+    </Suspense>
   );
 }

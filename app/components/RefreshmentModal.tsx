@@ -421,7 +421,7 @@ export default function RefreshmentModal() {
                 <span>
                   Showing {filteredItems.length} 
                   {filteredItems.length !== refreshmentItems.length && ` of ${refreshmentItems.length}`} pit stops
-                  {searchQuery && <span className="text-[#4A7C59] font-medium"> matching "{searchQuery}"</span>}
+                  {searchQuery && <span className="text-[#4A7C59] font-medium"> matching &ldquo;{searchQuery}&rdquo;</span>}
                 </span>
                 <span className="text-gray-400">
                   {categoryFilter === "all" && !searchQuery.trim() 

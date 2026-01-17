@@ -65,8 +65,9 @@ export default function ItineraryView({
     
     const waypointDisplayNames = waypoints.map((wp, idx) => {
       // Try both numeric and string keys since MongoDB might return either
-      const displayName = waypointNames[idx] || waypointNames[String(idx)] || wp;
-      console.log(`[ItineraryView] waypoint ${idx}: name="${waypointNames[idx] || waypointNames[String(idx)]}" wp="${wp}" => "${displayName}"`);
+      const names = waypointNames as any;
+      const displayName = waypointNames[idx] || names[String(idx)] || wp;
+      console.log(`[ItineraryView] waypoint ${idx}: name="${waypointNames[idx] || names[String(idx)]}" wp="${wp}" => "${displayName}"`);
       return displayName;
     });
     // Use destinationName if available, otherwise use destination value
